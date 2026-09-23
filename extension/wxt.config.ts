@@ -1,0 +1,40 @@
+import { defineConfig } from 'wxt';
+import react from '@vitejs/plugin-react';
+import path from 'node:path';
+
+export default defineConfig({
+  vite: () =>
+    ({
+      plugins: [react()],
+      resolve: {
+        alias: {
+          '@': path.resolve(__dirname, './src'),
+          '@contracts': path.resolve(__dirname, '../contracts/ts'),
+        },
+      },
+    } as any),
+  manifest: {
+    name: 'SIH26171 Browser Agent',
+    version: '1.0.0',
+    description: 'On-device visual perception for light-weight browser agents (ISRO, PS 26171)',
+    permissions: [
+      'activeTab',
+      'scripting',
+      'storage',
+      'offscreen',
+      'sidePanel',
+      'webNavigation',
+      'tabs',
+    ],
+    host_permissions: ['<all_urls>', 'http://localhost:8000/*'],
+    content_security_policy: {
+      extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
+    },
+    web_accessible_resources: [
+      {
+        resources: ['mediapipe/*', 'models/*'],
+        matches: ['<all_urls>'],
+      },
+    ],
+  },
+});
