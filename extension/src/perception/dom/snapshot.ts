@@ -148,6 +148,7 @@ export async function extractDomSnapshot(
     }
 
     const text = (el.textContent || '').trim().slice(0, 300);
+    const classes = Array.from(el.classList);
 
     elements.push({
       dom_id: domId,
@@ -157,6 +158,7 @@ export async function extractDomSnapshot(
       role,
       name,
       text,
+      classes,
       aria,
       input: inputInfo,
       bbox,

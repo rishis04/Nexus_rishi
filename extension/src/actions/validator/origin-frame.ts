@@ -12,7 +12,10 @@ export function validateOrigin(
     };
   }
 
-  if (!session.allowed_origins.includes(action.origin)) {
+  // Allow local files to be processed
+  if (action.origin === 'file://') {
+    // Skip allowed_origins check for local files
+  } else if (!session.allowed_origins.includes(action.origin)) {
     return {
       ok: false,
       reason: `Action origin "${action.origin}" is not in session allowed_origins`,

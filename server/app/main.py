@@ -88,25 +88,26 @@ async def plan_step(request: Request, x_api_key: Optional[str] = Header(None)):
         print(f"  - id={r.get('region_id')} type={r.get('type')} text={repr(r.get('text'))} interactable={r.get('interactable')}")
 
     # Check if goal is already completed
-    history = context.get("history", [])
-    has_clicked = any(
-        h.get("action") == "click" and h.get("result") == "ok" for h in history
-    )
-    auth_success = any(
-        "authentication successful" in (r.get("text") or "").lower()
-        or "welcome" in (r.get("text") or "").lower()
-        for r in regions
-    )
-
-    if has_clicked or auth_success:
-        server_ms = max(1, int((time.time() - start_time) * 1000))
-        return {
-            "request_id": request_id,
-            "status": "done",
-            "action": None,
-            "message": "Task completed successfully. Authentication achieved.",
-            "usage": {"server_ms": server_ms, "model": "heuristic-planner-v1"},
-        }
+    # (Disabled so the vision model runs continuously until manually stopped)
+    # history = context.get("history", [])
+    # has_clicked = any(
+    #     h.get("action") == "click" and h.get("result") == "ok" for h in history
+    # )
+    # auth_success = any(
+    #     "authentication successful" in (r.get("text") or "").lower()
+    #     or "welcome" in (r.get("text") or "").lower()
+    #     for r in regions
+    # )
+    #
+    # if has_clicked or auth_success:
+    #     server_ms = max(1, int((time.time() - start_time) * 1000))
+    #     return {
+    #         "request_id": request_id,
+    #         "status": "done",
+    #         "action": None,
+    #         "message": "Task completed successfully. Authentication achieved.",
+    #         "usage": {"server_ms": server_ms, "model": "heuristic-planner-v1"},
+    #     }
 
     # Goal-directed planning logic:
     # Look for interactable button / action element
@@ -145,14 +146,14 @@ async def plan_step(request: Request, x_api_key: Optional[str] = Header(None)):
     action = {
         "action_id": f"act_{int(time.time() * 1000)}",
         "request_id": request_id,
-        "action": "click",
+        "action": "focus",
         "target": {"region_id": target_region_id},
         "params": None,
         "capability": None,
         "origin": origin,
         "frame_id": frame_id,
         "page_state_hash": page_state_hash,
-        "rationale": f"Clicking target button {target_region_id} on {origin}",
+        "rationale": f"Focusing target {target_region_id} on {origin} to maintain continuous perception",
     }
 
     server_ms = max(1, int((time.time() - start_time) * 1000))

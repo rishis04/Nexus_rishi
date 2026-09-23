@@ -43,4 +43,5 @@ export interface TaskSession {
   frame_page_state_hash: string | null;
   region_index: Record<string, RegionIndexEntry>; // region_id → metadata (no text)
   history: StepSummary[];
+  recent_state_hashes: string[];
 }

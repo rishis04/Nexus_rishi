@@ -25,6 +25,7 @@ export interface DomElementInfo {
     pressed?: boolean;
     hidden?: boolean;
   };
+  classes?: string[];
   input?: {
     type: string;
     autocomplete: string | null;

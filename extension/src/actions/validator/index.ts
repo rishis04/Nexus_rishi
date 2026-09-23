@@ -13,12 +13,13 @@ import { validateState } from './state.js';
 import { validateTarget, validateVisibilityAndInteractability } from './target.js';
 import { validateCapability } from './capability.js';
 import { validateTextScan } from './text-scan.js';
+import { validateAttestation } from './attestation.js';
 
 export interface ValidationContext {
   session: TaskSession;
   liveOrigin: string;
   liveFrameId: string;
-  livePageStateHash: string;
+  recentStateHashes: string[];
   targetResolution?: TargetResolution;
 }
 
@@ -93,7 +94,7 @@ export async function validateAction(
   }
 
   // Step 5: state
-  const stateRes = validateState(action, ctx.livePageStateHash);
+  const stateRes = validateState(action, ctx.recentStateHashes);
   checks.push({ step: 'state', ok: stateRes.ok });
   if (!stateRes.ok) {
     return {
@@ -157,6 +158,19 @@ export async function validateAction(
       failed_step: 'text_scan',
       code: 'TEXT_UNSAFE',
       reason: textRes.reason || 'Outbound text scan failed',
+      checks,
+    };
+  }
+
+  // Step 10: attestation
+  const attRes = await validateAttestation(action);
+  checks.push({ step: 'attestation', ok: attRes.ok });
+  if (!attRes.ok) {
+    return {
+      valid: false,
+      failed_step: 'attestation',
+      code: 'SERVER_INVALID',
+      reason: attRes.reason || 'Cryptographic attestation failed',
       checks,
     };
   }

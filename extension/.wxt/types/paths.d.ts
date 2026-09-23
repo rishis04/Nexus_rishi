@@ -12,6 +12,7 @@ declare module "wxt/browser" {
     | "/mediapipe/vision_wasm_module_internal.wasm"
     | "/mediapipe/vision_wasm_nosimd_internal.js"
     | "/mediapipe/vision_wasm_nosimd_internal.wasm"
+    | "/models/blaze_face_full_range.tflite"
     | "/models/blaze_face_short_range.tflite"
     | "/offscreen.html"
     | "/sidepanel.html"

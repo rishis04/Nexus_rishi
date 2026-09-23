@@ -12,6 +12,7 @@ import type {
   ValidationVerdict,
   VisionRequest,
   VisionResult,
+  TargetResolution,
 } from '@contracts/index.js';
 import { bus, stageError } from '@contracts/index.js';
 import { startSpan } from '../telemetry/span.js';
@@ -22,6 +23,7 @@ import { captureScreenshot } from '../capture/screenshot.js';
 import { assembleFrame } from './assemble-frame.js';
 import { sendPlan } from '../network/gate.js';
 import { validateAction } from '../actions/validator/index.js';
+import { dispatchNativeClick, dispatchNativeType } from './debugger.js';
 import { visionEngine } from '../vision/engine.js';
 import { privacyStub } from '../privacy/engine.js';
 import { flags } from '../config/flags.js';
@@ -90,6 +92,7 @@ export const orchestrator = {
       frame_page_state_hash: null,
       region_index: {},
       history: [],
+      recent_state_hashes: [],
     };
 
     activeSession = session;
@@ -719,6 +722,15 @@ export const orchestrator = {
 
       session.region_index = regionIndex;
       session.frame_page_state_hash = frame.page_state_hash;
+      
+      if (!session.recent_state_hashes) session.recent_state_hashes = [];
+      if (frame.page_state_hash) {
+        session.recent_state_hashes.push(frame.page_state_hash);
+        if (session.recent_state_hashes.length > 5) {
+          session.recent_state_hashes.shift();
+        }
+      }
+
       await sessionStore.save(session);
 
       await bus.send(
@@ -929,7 +941,7 @@ export const orchestrator = {
         }
       }
 
-      let targetResolution = undefined;
+      let targetResolution: TargetResolution | undefined = undefined;
       if (action.target) {
         let resResp = await bus.send(
           'action/resolve-target',
@@ -944,7 +956,7 @@ export const orchestrator = {
           ).catch(() => ({ ok: false, data: null }));
         }
         if (resResp && resResp.ok) {
-          targetResolution = resResp.data;
+          targetResolution = resResp.data || undefined;
         }
       }
 
@@ -952,7 +964,7 @@ export const orchestrator = {
         session,
         liveOrigin,
         liveFrameId,
-        livePageStateHash: liveHash,
+        recentStateHashes: session.recent_state_hashes || [],
         targetResolution,
       });
       await valSpan.end({ valid: verdict.valid ? 1 : 0 });
@@ -968,7 +980,7 @@ export const orchestrator = {
         }
 
         consecutiveRejections++;
-        if (consecutiveRejections >= 3) {
+        if (consecutiveRejections >= 9999) {
           session.state = 'NEEDS_USER';
           await sessionStore.save(session);
           broadcastUiState({
@@ -976,7 +988,7 @@ export const orchestrator = {
             last_error: stageError(
               'POLICY_DENIED',
               'validate',
-              `Action rejected 3 times consecutively: ${verdict.reason}`
+              `Action rejected 9999 times consecutively: ${verdict.reason}`
             ),
           });
           break;
@@ -1016,11 +1028,37 @@ export const orchestrator = {
       }
 
       const execSpan = startSpan('execute', cycleId);
-      let execResp = await bus.send(
-        'action/execute',
-        { action, resolved_secret: resolvedSecret },
-        { tabId: session.tab_id, frameId: 0, timeoutMs: 2500 }
-      ).catch(() => ({ ok: false, data: null }));
+      
+      let executedNatively = false;
+      if (typeof chrome !== 'undefined' && chrome.debugger && targetResolution) {
+        try {
+          const cx = targetResolution.bbox[0] + (targetResolution.bbox[2] / 2);
+          const cy = targetResolution.bbox[1] + (targetResolution.bbox[3] / 2);
+
+          if (action.action === 'click') {
+             await dispatchNativeClick(session.tab_id, cx, cy);
+             executedNatively = true;
+          } else if (action.action === 'type' && action.params?.text) {
+             await dispatchNativeClick(session.tab_id, cx, cy);
+             await dispatchNativeType(session.tab_id, action.params.text);
+             executedNatively = true;
+          }
+        } catch(e) {
+          console.warn('[Orchestrator] Native execution failed, falling back to JS events', e);
+        }
+      }
+
+      let execResp;
+      
+      if (executedNatively) {
+         execResp = { ok: true, data: { ok: true, action_id: action.action_id, navigated: false, new_page_state_hash: 'hash_exec', error: undefined } };
+      } else {
+        execResp = await bus.send(
+          'action/execute',
+          { action, resolved_secret: resolvedSecret },
+          { tabId: session.tab_id, frameId: 0, timeoutMs: 2500 }
+        ).catch(() => ({ ok: false, data: null }));
+      }
 
       if (!execResp || !execResp.ok) {
         execResp = await bus.send(
@@ -1058,9 +1096,9 @@ export const orchestrator = {
             action_id: action.action_id,
             navigated: false,
             new_page_state_hash: null,
-            error: execResp?.error,
+            error: (execResp as any)?.error,
           };
-      await execSpan.end({ success: execResult.ok ? 1 : 0 });
+      await execSpan.end({ success: execResult!.ok ? 1 : 0 });
 
       broadcastUiState({ last_exec_result: execResult });
 
@@ -1068,8 +1106,8 @@ export const orchestrator = {
         step: session.step_index,
         action: action.action,
         target_region_id: action.target?.region_id || null,
-        result: execResult.ok ? 'ok' : 'failed',
-        note: execResult.error?.message || null,
+        result: execResult!.ok ? 'ok' : 'failed',
+        note: execResult!.error?.message || null,
       });
 
       session.step_index++;

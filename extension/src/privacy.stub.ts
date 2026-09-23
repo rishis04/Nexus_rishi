@@ -335,6 +335,21 @@ export const privacyStub = {
           elId.includes('email') ||
           domEl?.input?.type === 'email');
 
+      const isProfileImage =
+        (reg.semantic_type === 'image' || domEl?.tag === 'img' || domEl?.tag === 'svg' || (reg.semantic_type as any) === 'icon') &&
+        (elAccessibleName.includes('profile') ||
+          elAccessibleName.includes('avatar') ||
+          elAccessibleName.includes('photo') ||
+          elId.includes('profile') ||
+          elId.includes('avatar') ||
+          regText.includes('profile') ||
+          domEl?.classes?.some((c: string) => 
+            c.toLowerCase().includes('profile') || 
+            c.toLowerCase().includes('avatar') || 
+            c.toLowerCase().includes('photo') || 
+            c.toLowerCase().includes('ghost-person')
+          ));
+
       // Direct semantic classification for form inputs
       if (isAadhaarField) {
         regionHasPii = true;
@@ -411,6 +426,21 @@ export const privacyStub = {
         });
         textReplacements++;
         sanitizedText = '<EMAIL>';
+      } else if (isProfileImage) {
+        regionHasPii = true;
+        boxLabel = 'FACE';
+        detections.push({
+          id: `pii_profile_${reg.region_id}`,
+          type: 'FACE',
+          source: ['DOM'],
+          region_id: reg.region_id,
+          bbox: reg.bbox,
+          span: null,
+          confidence: 1.0,
+          mandatory: true,
+        });
+        textReplacements++;
+        sanitizedText = '<REDACTED_FACE>';
       } else if (sanitizedText) {
         // Pattern detection for unclassified text regions (OCR, paragraphs, text nodes)
         // 1. Aadhaar detection with Verhoeff checksum
@@ -540,19 +570,7 @@ export const privacyStub = {
     // Detect and redact faces from perception frame
     if (req.frame.faces && req.frame.faces.length > 0) {
       req.frame.faces.forEach((face, idx) => {
-        // Disallow face detections on interactable buttons, canvas, or form inputs
-        const collidingInteractable = req.frame.dom?.elements?.find((el: any) => {
-          if (el.tag === 'img' || el.tag === 'svg') return false;
-          if (!el.interactable && el.tag !== 'button' && el.tag !== 'canvas') return false;
-          const [bx, by, bw, bh] = el.bbox;
-          const [fx, fy, fw, fh] = face.bbox;
-          const xOverlap = Math.max(0, Math.min(bx + bw, fx + fw) - Math.max(bx, fx));
-          const yOverlap = Math.max(0, Math.min(by + bh, fy + fh) - Math.max(by, fy));
-          return xOverlap * yOverlap > 0.4 * Math.min(bw * bh, fw * fh);
-        });
-        if (collidingInteractable) {
-          return;
-        }
+        // We intentionally allow faces to be redacted anywhere on the page, including on canvas elements or interactables.
 
         const faceId = (face as any).face_id || `face_${idx + 1}`;
         detections.push({

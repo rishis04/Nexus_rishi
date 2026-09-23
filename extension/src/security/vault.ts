@@ -13,8 +13,22 @@ export interface VaultEntry {
   allowed_origins: string[];
 }
 
+import { openDB, type IDBPDatabase } from 'idb';
+
 let masterKey: CryptoKey | null = null;
-const memoryVault: Map<string, VaultEntry> = new Map();
+
+const DB_NAME = 'SihVaultDB';
+const STORE_NAME = 'credentials';
+
+async function getDB(): Promise<IDBPDatabase> {
+  return openDB(DB_NAME, 1, {
+    upgrade(db) {
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'ref' });
+      }
+    },
+  });
+}
 
 /**
  * Derives or generates a local 256-bit AES-GCM master encryption key.
@@ -97,7 +111,8 @@ export async function storeCredential(
     ivBase64,
     allowed_origins,
   };
-  memoryVault.set(ref, entry);
+  const db = await getDB();
+  await db.put(STORE_NAME, entry);
   return entry;
 }
 
@@ -105,7 +120,9 @@ export async function storeCredential(
  * Initialize default enterprise demo credentials into the encrypted vault.
  */
 export async function initDefaultVault(): Promise<void> {
-  if (memoryVault.size === 0) {
+  const db = await getDB();
+  const count = await db.count(STORE_NAME);
+  if (count === 0) {
     await storeCredential(
       'cap_email_01',
       'email',
@@ -139,7 +156,8 @@ export const encryptedVault = {
     ctx: { task_id: string; origin: string; frame_id: string; action: string }
   ): Promise<{ ok: boolean; reason?: string }> {
     await initDefaultVault();
-    const entry = memoryVault.get(ref);
+    const db = await getDB();
+    const entry = await db.get(STORE_NAME, ref);
     if (!entry) {
       return { ok: false, reason: `Unknown capability ref: ${ref}` };
     }
@@ -147,8 +165,8 @@ export const encryptedVault = {
     const isAllowedOrigin =
       entry.allowed_origins.includes(ctx.origin) ||
       entry.allowed_origins.includes('*') ||
-      (ctx.origin.includes('localhost') && entry.allowed_origins.some((o) => o.includes('localhost'))) ||
-      (ctx.origin.includes('127.0.0.1') && entry.allowed_origins.some((o) => o.includes('127.0.0.1')));
+      (ctx.origin.includes('localhost') && entry.allowed_origins.some((o: string) => o.includes('localhost'))) ||
+      (ctx.origin.includes('127.0.0.1') && entry.allowed_origins.some((o: string) => o.includes('127.0.0.1')));
 
     if (!isAllowedOrigin) {
       return { ok: false, reason: `Capability ${ref} not permitted on origin ${ctx.origin}` };
@@ -161,15 +179,16 @@ export const encryptedVault = {
     ctx: { task_id: string; origin: string }
   ): Promise<string> {
     await initDefaultVault();
-    const entry = memoryVault.get(ref);
+    const db = await getDB();
+    const entry = await db.get(STORE_NAME, ref);
     if (!entry) {
       throw new Error(`Unauthorized vault resolve for ref ${ref}`);
     }
     const isAllowedOrigin =
       entry.allowed_origins.includes(ctx.origin) ||
       entry.allowed_origins.includes('*') ||
-      (ctx.origin.includes('localhost') && entry.allowed_origins.some((o) => o.includes('localhost'))) ||
-      (ctx.origin.includes('127.0.0.1') && entry.allowed_origins.some((o) => o.includes('127.0.0.1')));
+      (ctx.origin.includes('localhost') && entry.allowed_origins.some((o: string) => o.includes('localhost'))) ||
+      (ctx.origin.includes('127.0.0.1') && entry.allowed_origins.some((o: string) => o.includes('127.0.0.1')));
 
     if (!isAllowedOrigin) {
       throw new Error(`Unauthorized vault resolve for ref ${ref} on origin ${ctx.origin}`);
@@ -180,13 +199,16 @@ export const encryptedVault = {
 
   async listCapabilities(origin: string): Promise<{ ref: string; kind: 'password' | 'email' | 'phone' | 'token' | 'profile'; label: string }[]> {
     await initDefaultVault();
+    const db = await getDB();
+    const allEntries = await db.getAll(STORE_NAME);
+    
     const results: { ref: string; kind: 'password' | 'email' | 'phone' | 'token' | 'profile'; label: string }[] = [];
-    for (const entry of memoryVault.values()) {
+    for (const entry of allEntries) {
       const isAllowed =
         entry.allowed_origins.includes(origin) ||
         entry.allowed_origins.includes('*') ||
-        (origin.includes('localhost') && entry.allowed_origins.some((o) => o.includes('localhost'))) ||
-        (origin.includes('127.0.0.1') && entry.allowed_origins.some((o) => o.includes('127.0.0.1')));
+        (origin.includes('localhost') && entry.allowed_origins.some((o: string) => o.includes('localhost'))) ||
+        (origin.includes('127.0.0.1') && entry.allowed_origins.some((o: string) => o.includes('127.0.0.1')));
 
       if (isAllowed) {
         results.push({

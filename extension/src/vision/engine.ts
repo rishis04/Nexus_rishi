@@ -1,6 +1,12 @@
 import * as ort from 'onnxruntime-web/webgpu';
 import Tesseract from 'tesseract.js';
-import { FaceDetector, FilesetResolver } from '@mediapipe/tasks-vision';
+import {
+  initFaceDetector,
+  detectFaces,
+  faceDetectorUsesGpu
+} from './face-detection';
+import { performSpatialFusion } from './grounding';
+import { initUIDetector, detectUIComponents, uiDetectorUsesGpu } from './ui-detection';
 import type {
   Budget,
   FaceBox,
@@ -8,98 +14,18 @@ import type {
   PerceptionRegion,
   VisionRequest,
   VisionResult,
+  SemanticType,
 } from '@contracts/index.js';
 
 // Pre-configure WebGPU execution flags for Phase 3
 ort.env.wasm.numThreads = 4;
 ort.env.wasm.simd = true;
 
-
-let faceDetector: FaceDetector | null = null;
-/** True when the singleton was successfully created with the GPU delegate. */
-let faceDetectorUsesGpu = false;
-
-async function initFaceDetector(): Promise<FaceDetector | null> {
-  if (faceDetector) return faceDetector;
-
-  // In MV3 Service Worker (where window is undefined), dynamic importScripts() and WebGPU
-  // are blocked by Chrome. Heavy vision / MediaPipe tasks must run in the Offscreen Document.
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return null;
-  }
-
-  let wasmPath = '';
-  let modelPath = '';
-
-  if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
-    try {
-      // FilesetResolver appends subpaths with slash, so avoid trailing slash to prevent double slash (//)
-      wasmPath = chrome.runtime.getURL('mediapipe').replace(/\/+$/, '');
-      modelPath = chrome.runtime.getURL('models/blaze_face_short_range.tflite');
-    } catch {}
-  }
-
-  // Never use remote CDN URLs in extension context to strictly respect CSP and Invariant I5
-  if (!wasmPath || !modelPath) {
-    return null;
-  }
-
-  try {
-    const vision = await FilesetResolver.forVisionTasks(wasmPath);
-
-    // ROOT CAUSE FIX: MediaPipe's WASM module cannot fetch chrome-extension:// URLs
-    // via its internal Emscripten VFS/XHR. Passing modelAssetPath causes setGraph()
-    // to crash inside the WASM with an abort ($func3507 → $Gf) because the buffer
-    // is null/empty. The fix: pre-fetch the .tflite bytes from JS context (which CAN
-    // read chrome-extension:// URLs), then hand the raw Uint8Array to MediaPipe via
-    // modelAssetBuffer. MediaPipe will use the buffer directly, bypassing WASM fetch.
-    const modelResp = await fetch(modelPath);
-    if (!modelResp.ok) {
-      console.warn('[VisionEngine] Failed to fetch model:', modelResp.status, modelPath);
-      return null;
-    }
-    const modelBuffer = new Uint8Array(await modelResp.arrayBuffer());
-
-    try {
-      faceDetector = await FaceDetector.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetBuffer: modelBuffer,
-          delegate: 'GPU',
-        },
-        runningMode: 'IMAGE',
-        // Lowered from default 0.5 → 0.35 to capture small, partial, and
-        // angled faces in browser screenshots without flooding with noise.
-        // NMS at 0.4 suppresses duplicate boxes on multi-face scenes.
-        minDetectionConfidence: 0.35,
-        minSuppressionThreshold: 0.4,
-      });
-      faceDetectorUsesGpu = true;
-    } catch (gpuErr) {
-      console.warn('[VisionEngine] GPU delegate init failed, falling back to CPU:', gpuErr);
-      faceDetector = await FaceDetector.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetBuffer: modelBuffer,
-          delegate: 'CPU',
-        },
-        runningMode: 'IMAGE',
-        minDetectionConfidence: 0.35,
-        minSuppressionThreshold: 0.4,
-      });
-      faceDetectorUsesGpu = false;
-    }
-
-    return faceDetector;
-  } catch (err) {
-    console.warn('[VisionEngine] Local MediaPipe init failed or unavailable in this context:', err);
-    return null;
-  }
-}
-
 export const visionEngine = {
   getBudget(): Budget {
     return {
       level: 'HIGH',
-      backend: 'webgpu', // Upgraded to WebGPU
+      backend: 'webgpu',
       max_vision_regions: 8,
       max_pixels: 1024 * 1024,
       allow_detector: true,
@@ -108,9 +34,9 @@ export const visionEngine = {
   },
 
   async perceive(req: VisionRequest): Promise<VisionResult> {
-    const regions: PerceptionRegion[] = [];
+    let regions: PerceptionRegion[] = [];
     const ocr_tokens: OcrToken[] = [];
-    const faces: FaceBox[] = [];
+    let faces: FaceBox[] = [];
     let webgpuUsed = false;
     const t0 = performance.now();
     let inferenceMs = 0;
@@ -132,9 +58,6 @@ export const visionEngine = {
                 bytes[i] = binaryStr.charCodeAt(i);
               }
 
-              // Detect MIME type from the data-URL prefix; default to png for screenshots.
-              // This prevents corrupt decoding of PNG screenshots that were previously forced
-              // into an image/jpeg Blob.
               const mimeMatch = req.image_data_url.match(/^data:([^;,]+)/);
               const mimeType = (mimeMatch?.[1] || 'image/png') as string;
               const blob = new Blob([bytes], { type: mimeType });
@@ -144,10 +67,6 @@ export const visionEngine = {
                 const bitmapW = imgBitmap.width;
                 const bitmapH = imgBitmap.height;
 
-                // DPR-aware coordinate normalisation:
-                // MediaPipe returns bounding-box coords in the bitmap's native (physical)
-                // pixel space. The rest of the privacy pipeline works in CSS pixels.
-                // CaptureMeta.dpr bridges the two; we compute a per-axis scale factor.
                 const dpr = req.capture?.dpr ?? 1;
                 const viewportW = req.capture?.viewport?.w ?? bitmapW / dpr;
                 const viewportH = req.capture?.viewport?.h ?? bitmapH / dpr;
@@ -155,37 +74,76 @@ export const visionEngine = {
                 const scaleY = viewportH / bitmapH;
 
                 const tInfer0 = performance.now();
-                const faceResults = detector.detect(imgBitmap as any);
+                faces = await detectFaces(detector, imgBitmap, scaleX, scaleY);
                 inferenceMs = performance.now() - tInfer0;
 
-                // Always release the ImageBitmap after inference to prevent GPU/RAM leak
-                // on every perception cycle.
                 imgBitmap.close();
-
-                faceResults.detections.forEach((det: any) => {
-                  if (det.boundingBox) {
-                    // Map from physical bitmap coordinates → CSS viewport coordinates.
-                    // Without this step the bounding boxes are DPR× too large and
-                    // positioned incorrectly on high-DPI screens.
-                    faces.push({
-                      bbox: [
-                        Math.round(det.boundingBox.originX * scaleX),
-                        Math.round(det.boundingBox.originY * scaleY),
-                        Math.round(det.boundingBox.width   * scaleX),
-                        Math.round(det.boundingBox.height  * scaleY),
-                      ],
-                      confidence: det.categories[0]?.score ?? 0.95,
-                    });
-                  }
-                });
-
-                // Reflect actual backend used by the singleton delegate.
                 webgpuUsed = faceDetectorUsesGpu;
               }
             }
           }
         } catch (e) {
           console.warn('[VisionEngine] MediaPipe face detection failed or unavailable:', e);
+        }
+
+        // 2. Try ONNX UI Component Detection (Phase 2)
+        try {
+          const uiDetector = await initUIDetector();
+          if (uiDetector && typeof createImageBitmap !== 'undefined') {
+            const base64Data = (req.image_data_url || '').split(',')[1] || '';
+            if (base64Data && typeof atob !== 'undefined') {
+              const binaryStr = atob(base64Data);
+              const bytes = new Uint8Array(binaryStr.length);
+              for (let i = 0; i < binaryStr.length; i++) {
+                bytes[i] = binaryStr.charCodeAt(i);
+              }
+              const mimeMatch = req.image_data_url.match(/^data:([^;,]+)/);
+              const mimeType = (mimeMatch?.[1] || 'image/png') as string;
+              const blob = new Blob([bytes], { type: mimeType });
+
+              const imgBitmap = await createImageBitmap(blob);
+              const bitmapW = imgBitmap.width;
+              const bitmapH = imgBitmap.height;
+
+              const dpr = req.capture?.dpr ?? 1;
+              const viewportW = req.capture?.viewport?.w ?? bitmapW / dpr;
+              const viewportH = req.capture?.viewport?.h ?? bitmapH / dpr;
+              const scaleX = viewportW / bitmapW;
+              const scaleY = viewportH / bitmapH;
+
+              const tInferUi = performance.now();
+              const uiComponents = await detectUIComponents(uiDetector, imgBitmap, scaleX, scaleY);
+              const uiMs = performance.now() - tInferUi;
+              inferenceMs += uiMs;
+
+              uiComponents.forEach((comp, idx) => {
+                regions.push({
+                  region_id: `ui_comp_${idx}`,
+                  local_key: `ui_${comp.label}_${idx}`,
+                  dom_ref: null,
+                  source: ['VISION'],
+                  semantic_type: comp.label as SemanticType,
+                  text: null,
+                  bbox: comp.bbox,
+                  confidence: comp.confidence,
+                  visible: true,
+                  interactable: true,
+                  visual_state: ['visible', 'enabled'],
+                  route: 'HIGH',
+                  sensitivity: 'none',
+                  origin: req.dom.url_origin,
+                  frame_id: 'main',
+                  page_state_hash: req.dom.page_state_hash,
+                  timestamp: Date.now(),
+                });
+              });
+
+              imgBitmap.close();
+              if (uiDetectorUsesGpu) webgpuUsed = true;
+            }
+          }
+        } catch (e) {
+          console.warn('[VisionEngine] ONNX UI Component detection failed:', e);
         }
 
         // NOTE: The DOM-element fallback that previously pushed every <img> element
@@ -246,10 +204,14 @@ export const visionEngine = {
 
     const totalMs = performance.now() - t0;
 
+    // Apply IoU Spatial Fusion
+    const domRegions = (req as any).dom?.regions || [];
+    const fusedRegions = performSpatialFusion(domRegions, regions, ocr_tokens, 0.5);
+
     return {
       cycle_id: req.cycle_id,
       capture_id: req.capture?.capture_id || `cap_${Date.now()}`,
-      regions,
+      regions: fusedRegions,
       ocr_tokens,
       faces,
       unresolved: [],

@@ -26,6 +26,7 @@ export interface StructuredAction {
   frame_id: FrameId;
   page_state_hash: string; // set by SERVER from request ctx, not by the LLM
   rationale?: string; // UI display only — never used in decisions
+  attestation?: string; // Cryptographic attestation from the server
 }
 
 export interface PlanResponse {
@@ -45,7 +46,8 @@ export type ValidationStep =
   | 'target'
   | 'visibility'
   | 'capability'
-  | 'text_scan';
+  | 'text_scan'
+  | 'attestation';
 
 export interface ValidationVerdict {
   valid: boolean;
