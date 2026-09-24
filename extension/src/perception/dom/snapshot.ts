@@ -79,15 +79,29 @@ export async function extractDomSnapshot(
   // Query candidates
   const rawElements = Array.from(document.querySelectorAll(CANDIDATE_SELECTOR));
 
-  // Add elements with pointer cursor or onclick heuristic
+  // Add elements with pointer cursor, onclick heuristic, or CSS background-image
   const allNodes = document.querySelectorAll('*');
   for (let i = 0; i < allNodes.length; i++) {
     const el = allNodes[i];
     if (!el) continue;
+    
+    let isMeaningful = false;
     if ((el as any).onclick || (el as HTMLElement).style?.cursor === 'pointer') {
-      if (!rawElements.includes(el)) {
-        rawElements.push(el);
+      isMeaningful = true;
+    } else {
+      // Check for computed CSS background images (excluding generic linear-gradients if possible, or just check 'url(')
+      const computed = window.getComputedStyle(el);
+      if (computed.backgroundImage && computed.backgroundImage.includes('url(')) {
+        // Must have some geometry to be considered meaningful
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 10 && rect.height > 10) {
+          isMeaningful = true;
+        }
       }
+    }
+
+    if (isMeaningful && !rawElements.includes(el)) {
+      rawElements.push(el);
     }
   }
 

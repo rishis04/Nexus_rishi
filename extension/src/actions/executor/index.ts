@@ -76,6 +76,17 @@ export async function executeAction(
         break;
       }
 
+      case 'navigate': {
+        if (!action.params?.url) throw new Error('Navigate requires a url parameter');
+        window.location.href = action.params.url;
+        break;
+      }
+
+      case 'back': {
+        window.history.back();
+        break;
+      }
+
       default:
         throw new Error(`Unsupported action type: ${(action as any).action}`);
     }

@@ -3,9 +3,6 @@ import type { CaptureMeta } from '@contracts/index.js';
 let lastCaptureTime = 0;
 const MIN_INTERVAL_MS = 800; // Rate limit ~1.25 calls/s (safely below Chrome's 2 calls/s quota)
 
-// 1x1 transparent PNG data URL fallback
-const MOCK_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-
 export async function captureScreenshot(
   tabId: number,
   pageStateHash: string,
@@ -46,8 +43,11 @@ export async function captureScreenshot(
 
       // Fallback timer: Never let captureVisibleTab hang the execution pipeline
       const fallbackTimer = setTimeout(() => {
-        console.warn('[Screenshot] captureVisibleTab timed out after 1800ms, proceeding with fallback');
-        safeResolve({ dataUrl: MOCK_DATA_URL, meta });
+        if (!resolved) {
+          resolved = true;
+          console.warn('[Screenshot] captureVisibleTab timed out after 1800ms');
+          resolve({ dataUrl: MOCK_DATA_URL, meta });
+        }
       }, 1800);
 
       const dpr = tabDpr || (typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1;
@@ -79,7 +79,12 @@ export async function captureScreenshot(
                   if (retryUrl && !chrome.runtime.lastError) {
                     safeResolve({ dataUrl: retryUrl, meta });
                   } else {
-                    safeResolve({ dataUrl: MOCK_DATA_URL, meta });
+                    if (!resolved) {
+                      resolved = true;
+                      clearTimeout(fallbackTimer);
+                      console.warn('[Screenshot] captureVisibleTab failed after retry: ' + (chrome.runtime.lastError?.message || 'No dataUrl'));
+                      resolve({ dataUrl: MOCK_DATA_URL, meta });
+                    }
                   }
                 };
                 if (windowId !== undefined) {
@@ -87,14 +92,24 @@ export async function captureScreenshot(
                 } else {
                   chrome.tabs.captureVisibleTab({ format: 'png' }, retryCallback);
                 }
-              } catch {
-                safeResolve({ dataUrl: MOCK_DATA_URL, meta });
+              } catch (e) {
+                if (!resolved) {
+                  resolved = true;
+                  clearTimeout(fallbackTimer);
+                  console.warn('[Screenshot] captureVisibleTab threw an exception during retry: ' + String(e));
+                  resolve({ dataUrl: MOCK_DATA_URL, meta });
+                }
               }
             }, 650);
             return;
           }
-          console.warn('[Screenshot] captureVisibleTab failed:', lastErrorMsg);
-          safeResolve({ dataUrl: MOCK_DATA_URL, meta });
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(fallbackTimer);
+            console.warn('[Screenshot] captureVisibleTab failed:', lastErrorMsg);
+            // Don't throw inside a callback; resolve with a mock so the pipeline doesn't hang
+            resolve({ dataUrl: MOCK_DATA_URL, meta });
+          }
           return;
         }
         safeResolve({ dataUrl, meta });

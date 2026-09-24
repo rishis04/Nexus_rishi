@@ -252,6 +252,30 @@ export const privacyStub = {
         timings_ms: { total: 0 },
       };
     }
+
+    // Check for vision failure on regions that required it
+    const visionFailed = !req.frame.capture;
+    const requiredVisionRegion = req.frame.regions.find((r) => r.route === 'LOW' || r.route === 'MEDIUM');
+    if (visionFailed && requiredVisionRegion) {
+      return {
+        cycle_id: req.cycle_id,
+        verdict: 'BLOCK',
+        attested: null,
+        block: {
+          reasons: [`Vision capture failed but region ${requiredVisionRegion.region_id} required vision (route: ${requiredVisionRegion.route})`],
+          checks_failed: ['vision_failure'],
+        },
+        detections: [],
+        redaction: {
+          text_replacements: 0,
+          masked_boxes: 0,
+          masked_area_px: 0,
+          image_included: false,
+        },
+        timings_ms: { total: 0 },
+      };
+    }
+
     const detections: PiiDetection[] = [];
     let textReplacements = 0;
     const boxesToMask: { x: number; y: number; w: number; h: number; label: string; source?: string }[] = [];
@@ -335,9 +359,27 @@ export const privacyStub = {
           elId.includes('email') ||
           domEl?.input?.type === 'email');
 
+      // Check if any detected face intersects this region
+      const containsFace = req.frame.faces?.some((face) => {
+        const intersectionArea =
+          Math.max(0, Math.min(reg.bbox[0] + reg.bbox[2], face.bbox[0] + face.bbox[2]) - Math.max(reg.bbox[0], face.bbox[0])) *
+          Math.max(0, Math.min(reg.bbox[1] + reg.bbox[3], face.bbox[1] + face.bbox[3]) - Math.max(reg.bbox[1], face.bbox[1]));
+        const faceArea = face.bbox[2] * face.bbox[3];
+        return faceArea > 0 && intersectionArea / faceArea > 0.5; // Face is mostly inside this region
+      });
+
+      // Profile avatars are typically square-ish and between 24 and 256 pixels in size.
+      // This generic geometry fallback helps when face detection fails on small avatars.
+      const isAvatarGeometry = 
+        reg.bbox[2] >= 24 && reg.bbox[2] <= 512 && 
+        reg.bbox[3] >= 24 && reg.bbox[3] <= 512 && 
+        Math.abs(reg.bbox[2] - reg.bbox[3]) <= 12;
+
       const isProfileImage =
-        (reg.semantic_type === 'image' || domEl?.tag === 'img' || domEl?.tag === 'svg' || (reg.semantic_type as any) === 'icon') &&
-        (elAccessibleName.includes('profile') ||
+        (reg.semantic_type === 'image' || domEl?.tag === 'img' || domEl?.tag === 'svg' || (reg.semantic_type as any) === 'icon' || domEl?.has_bg_image) &&
+        (containsFace ||
+          isAvatarGeometry ||
+          elAccessibleName.includes('profile') ||
           elAccessibleName.includes('avatar') ||
           elAccessibleName.includes('photo') ||
           elId.includes('profile') ||

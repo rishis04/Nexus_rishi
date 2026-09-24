@@ -18,13 +18,13 @@ export default defineConfig({
     version: '1.0.0',
     description: 'On-device visual perception for light-weight browser agents (ISRO, PS 26171)',
     permissions: [
-      'activeTab',
       'scripting',
       'storage',
       'offscreen',
       'sidePanel',
       'webNavigation',
       'tabs',
+      'activeTab',
     ],
     host_permissions: ['<all_urls>', 'http://localhost:8000/*'],
     content_security_policy: {
@@ -32,9 +32,18 @@ export default defineConfig({
     },
     web_accessible_resources: [
       {
-        resources: ['mediapipe/*', 'models/*'],
+        resources: ['mediapipe/*', 'models/*', 'onnx/*'],
         matches: ['<all_urls>'],
       },
     ],
+    commands: {
+      "dummy_command": {
+        "suggested_key": {
+          "default": "Ctrl+Shift+U",
+          "mac": "Command+Shift+U"
+        },
+        "description": "Dummy command to fix onCommand error"
+      }
+    },
   },
 });

@@ -23,6 +23,13 @@ export async function executeScroll(
   }
 
   if (typeof window !== 'undefined') {
+    const startX = window.scrollX;
+    const startY = window.scrollY;
+
     window.scrollBy({ left: dx, top: dy, behavior: 'instant' });
+
+    if (window.scrollX === startX && window.scrollY === startY) {
+      throw new Error(`Scroll ${direction} failed: No change in scroll position. Already at edge or not scrollable.`);
+    }
   }
 }

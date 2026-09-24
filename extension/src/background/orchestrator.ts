@@ -85,7 +85,7 @@ export const orchestrator = {
       task_text: taskText,
       tab_id: tabId,
       allowed_origins: initialOrigins,
-      allowed_actions: ['click', 'type', 'fill_secret', 'select', 'scroll', 'focus', 'keypress'],
+      allowed_actions: ['click', 'type', 'fill_secret', 'select', 'scroll', 'focus', 'keypress', 'navigate', 'back'],
       step_index: 0,
       max_steps: 15,
       state: 'IDLE',
@@ -1068,26 +1068,6 @@ export const orchestrator = {
         ).catch(() => ({ ok: false, data: null }));
       }
 
-      if ((!execResp || !execResp.ok) && typeof chrome !== 'undefined' && chrome.scripting?.executeScript && session.tab_id > 0) {
-        try {
-          await Promise.race([
-            chrome.scripting.executeScript({
-              target: { tabId: session.tab_id },
-              func: (act) => {
-                if (act.action === 'click') {
-                  const btn = document.querySelector('#submit-btn') || Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('Sign In') || b.textContent?.includes('Login'));
-                  if (btn) (btn as HTMLElement).click();
-                }
-              },
-              args: [action],
-            }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Direct execution fallback timed out')), 2000)),
-          ]);
-          execResp = { ok: true, data: { ok: true, action_id: action.action_id, navigated: false, new_page_state_hash: 'hash_exec', error: undefined } };
-        } catch (directExecErr) {
-          console.warn('[Orchestrator] Direct execution fallback failed:', directExecErr);
-        }
-      }
 
       const execResult = execResp && execResp.ok
         ? execResp.data

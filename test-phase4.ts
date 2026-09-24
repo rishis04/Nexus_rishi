@@ -1,5 +1,5 @@
-import { validateState } from './extension/src/actions/validator/state.ts';
-import { validateAttestation } from './extension/src/actions/validator/attestation.ts';
+import { validateState } from './extension/src/actions/validator/state.js';
+import { validateAttestation } from './extension/src/actions/validator/attestation.js';
 
 console.log("=== Testing Phase 4: State Validation (SPA Tolerance) ===");
 

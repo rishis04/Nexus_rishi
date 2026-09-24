@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateTarget, validateVisibilityAndInteractability } from '../extension/src/actions/validator/target.ts';
+import { validateTarget, validateVisibilityAndInteractability } from '../extension/src/actions/validator/target.js';
 import type { TargetResolution } from '../contracts/ts/index.js';
 
 describe('Adversarial Tests', () => {
@@ -23,14 +23,13 @@ describe('Adversarial Tests', () => {
       }
     } as any;
 
-    const mockResolution: TargetResolution = {
+    const mockResolution = {
       exists: true,
       visible: false, // hidden element
       occluded: false,
       interactable: true,
       bbox: [0, 0, 100, 30],
-      rect: { x: 0, y: 0, width: 100, height: 30 }
-    };
+    } as any;
     
     const result = validateVisibilityAndInteractability(mockAction, mockSession, mockResolution);
     
@@ -48,14 +47,13 @@ describe('Adversarial Tests', () => {
       region_index: { 'btn_123': { bbox: [0, 0, 100, 30] } }
     } as any;
 
-    const mockResolution: TargetResolution = {
+    const mockResolution = {
       exists: true,
       visible: true,
       occluded: true, // occluded by another div
       interactable: true,
       bbox: [0, 0, 100, 30],
-      rect: { x: 0, y: 0, width: 100, height: 30 }
-    };
+    } as any;
     
     const result = validateVisibilityAndInteractability(mockAction, mockSession, mockResolution);
     
@@ -73,14 +71,13 @@ describe('Adversarial Tests', () => {
       region_index: { 'btn_123': { bbox: [10, 10, 100, 30] } } // Original position
     } as any;
 
-    const mockResolution: TargetResolution = {
+    const mockResolution = {
       exists: true,
       visible: true,
       occluded: false,
       interactable: true,
       bbox: [900, 900, 100, 30], // Moved to trick user
-      rect: { x: 900, y: 900, width: 100, height: 30 }
-    };
+    } as any;
     
     const result = validateVisibilityAndInteractability(mockAction, mockSession, mockResolution);
     

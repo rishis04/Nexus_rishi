@@ -143,17 +143,24 @@ async def plan_step(request: Request, x_api_key: Optional[str] = Header(None)):
     )
     print(f"[Planner] Selected target: {target_region_id} (button_region: {button_region})")
 
+    task = context.get("task", "").lower()
+    action_type = "click"
+    if "scroll" in task:
+        action_type = "scroll"
+    elif "type" in task or "enter" in task:
+        action_type = "type"
+
     action = {
         "action_id": f"act_{int(time.time() * 1000)}",
         "request_id": request_id,
-        "action": "focus",
+        "action": action_type,
         "target": {"region_id": target_region_id},
         "params": None,
         "capability": None,
         "origin": origin,
         "frame_id": frame_id,
         "page_state_hash": page_state_hash,
-        "rationale": f"Focusing target {target_region_id} on {origin} to maintain continuous perception",
+        "rationale": f"Executing {action_type} on target {target_region_id} on {origin}",
     }
 
     server_ms = max(1, int((time.time() - start_time) * 1000))

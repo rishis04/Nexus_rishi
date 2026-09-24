@@ -7,7 +7,9 @@ export type ActionType =
   | 'select'
   | 'type'
   | 'keypress'
-  | 'fill_secret';
+  | 'fill_secret'
+  | 'navigate'
+  | 'back';
 
 export interface StructuredAction {
   action_id: string;

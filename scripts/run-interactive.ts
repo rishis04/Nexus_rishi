@@ -83,7 +83,7 @@ async function main() {
   }
 
   // 4. Save visual proof artifacts
-  const artifactDir = '/home/agent-s/.gemini/antigravity-ide/brain/9f41885c-f30a-4944-81e6-6a1a6b9e4ba2';
+  const artifactDir = '/Users/rishis/.gemini/antigravity-ide/brain/9344fbdc-aca7-450f-bca0-93c22e039bdc';
   await sidepanelPage.screenshot({ path: `${artifactDir}/sidepanel_success.png` });
   await page.screenshot({ path: `${artifactDir}/demo_authenticated.png` });
   console.log('✓ Updated screenshots captured in artifact directory');

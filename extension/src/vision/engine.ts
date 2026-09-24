@@ -21,6 +21,13 @@ import type {
 ort.env.wasm.numThreads = 4;
 ort.env.wasm.simd = true;
 
+// Configure WASM paths for the extension context
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+  ort.env.wasm.wasmPaths = chrome.runtime.getURL('onnx/');
+} else {
+  ort.env.wasm.wasmPaths = '/onnx/';
+}
+
 export const visionEngine = {
   getBudget(): Budget {
     return {

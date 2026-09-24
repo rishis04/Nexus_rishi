@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { describe, it, expect } from 'vitest';
 import type {
   StructuredAction,
@@ -50,6 +51,7 @@ function makeMockSession(overrides: Partial<TaskSession> = {}): TaskSession {
       },
     },
     history: [],
+    recent_state_hashes: [],
     ...overrides,
   };
 }
@@ -91,7 +93,7 @@ describe('Action Firewall Table-Driven Tests', () => {
       session,
       liveOrigin: 'http://localhost:5173',
       liveFrameId: 'main',
-      livePageStateHash: 'hash_1234567890ab',
+      recentStateHashes: ['hash_1234567890ab'],
       targetResolution: validTargetRes,
     });
 
@@ -108,7 +110,7 @@ describe('Action Firewall Table-Driven Tests', () => {
       session,
       liveOrigin: 'http://localhost:5173',
       liveFrameId: 'main',
-      livePageStateHash: 'hash_1234567890ab',
+      recentStateHashes: ['hash_1234567890ab'],
     });
 
     expect(verdict.valid).toBe(false);
@@ -124,7 +126,7 @@ describe('Action Firewall Table-Driven Tests', () => {
       session,
       liveOrigin: 'http://localhost:5173',
       liveFrameId: 'main',
-      livePageStateHash: 'hash_1234567890ab',
+      recentStateHashes: ['hash_1234567890ab'],
       targetResolution: validTargetRes,
     });
 
@@ -147,7 +149,7 @@ describe('Action Firewall Table-Driven Tests', () => {
       session,
       liveOrigin: 'http://localhost:5173',
       liveFrameId: 'main',
-      livePageStateHash: 'hash_1234567890ab',
+      recentStateHashes: ['hash_1234567890ab'],
       targetResolution: pwdRes,
     });
 
@@ -165,7 +167,7 @@ describe('Action Firewall Table-Driven Tests', () => {
       session,
       liveOrigin: 'http://localhost:5173',
       liveFrameId: 'main',
-      livePageStateHash: 'hash_1234567890ab',
+      recentStateHashes: ['hash_1234567890ab'],
       targetResolution: validTargetRes,
     });
 
@@ -183,7 +185,7 @@ describe('Action Firewall Table-Driven Tests', () => {
       session,
       liveOrigin: 'http://localhost:5173',
       liveFrameId: 'main',
-      livePageStateHash: 'hash_1234567890ab',
+      recentStateHashes: ['hash_1234567890ab'],
     });
 
     expect(verdict.valid).toBe(false);
@@ -200,7 +202,7 @@ describe('Action Firewall Table-Driven Tests', () => {
       session,
       liveOrigin: 'http://localhost:5173',
       liveFrameId: 'iframe_2',
-      livePageStateHash: 'hash_1234567890ab',
+      recentStateHashes: ['hash_1234567890ab'],
       targetResolution: validTargetRes,
     });
 
@@ -218,7 +220,7 @@ describe('Action Firewall Table-Driven Tests', () => {
       session,
       liveOrigin: 'http://localhost:5173',
       liveFrameId: 'main',
-      livePageStateHash: 'fresh_live_hash_12',
+      recentStateHashes: ['hash_1234567890ab'],
       targetResolution: validTargetRes,
     });
 
@@ -236,7 +238,7 @@ describe('Action Firewall Table-Driven Tests', () => {
       session,
       liveOrigin: 'http://localhost:5173',
       liveFrameId: 'main',
-      livePageStateHash: 'hash_1234567890ab',
+      recentStateHashes: ['hash_1234567890ab'],
       targetResolution: validTargetRes,
     });
 
@@ -255,7 +257,7 @@ describe('Action Firewall Table-Driven Tests', () => {
       session,
       liveOrigin: 'http://localhost:5173',
       liveFrameId: 'main',
-      livePageStateHash: 'hash_1234567890ab',
+      recentStateHashes: ['hash_1234567890ab'],
       targetResolution: occludedRes,
     });
 
@@ -276,7 +278,7 @@ describe('Action Firewall Table-Driven Tests', () => {
       session,
       liveOrigin: 'http://localhost:5173',
       liveFrameId: 'main',
-      livePageStateHash: 'hash_1234567890ab',
+      recentStateHashes: ['hash_1234567890ab'],
       targetResolution: validTargetRes,
     });
 
@@ -298,7 +300,7 @@ describe('Action Firewall Table-Driven Tests', () => {
       session,
       liveOrigin: 'http://localhost:5173',
       liveFrameId: 'main',
-      livePageStateHash: 'hash_1234567890ab',
+      recentStateHashes: ['hash_1234567890ab'],
       targetResolution: validTargetRes,
     });
 

@@ -173,7 +173,7 @@ export const CapabilityDescriptorSchema = z.object({
 }).strict();
 
 export const ActionTypeSchema = z.enum([
-  'click', 'scroll', 'focus', 'select', 'type', 'keypress', 'fill_secret',
+  'click', 'scroll', 'focus', 'select', 'type', 'keypress', 'fill_secret', 'navigate', 'back'
 ]);
 
 export const StepSummarySchema = z.object({

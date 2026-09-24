@@ -4,13 +4,13 @@
   "description": "On-device visual perception for light-weight browser agents (ISRO, PS 26171)",
   "version": "1.0.0",
   "permissions": [
-    "activeTab",
     "scripting",
     "storage",
     "offscreen",
     "sidePanel",
     "webNavigation",
-    "tabs"
+    "tabs",
+    "activeTab"
   ],
   "host_permissions": [
     "<all_urls>",
@@ -25,7 +25,8 @@
     {
       "resources": [
         "mediapipe/*",
-        "models/*"
+        "models/*",
+        "onnx/*"
       ],
       "matches": [
         "<all_urls>"
@@ -33,6 +34,13 @@
     }
   ],
   "commands": {
+    "dummy_command": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+U",
+        "mac": "Command+Shift+U"
+      },
+      "description": "Dummy command to fix onCommand error"
+    },
     "wxt:reload-extension": {
       "description": "Reload the extension during development",
       "suggested_key": {

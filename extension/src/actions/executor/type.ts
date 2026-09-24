@@ -25,6 +25,10 @@ export async function executeType(el: Element, text: string): Promise<void> {
   showActionHighlight([rect.left, rect.top, rect.width, rect.height]);
 
   setNativeValue(htmlEl, text);
+
+  if ((htmlEl as HTMLInputElement | HTMLTextAreaElement).value !== text) {
+    throw new Error('Type action failed: Element value did not update.');
+  }
 }
 
 export async function executeFillSecret(el: Element, secretValue: string): Promise<void> {
@@ -38,6 +42,10 @@ export async function executeFillSecret(el: Element, secretValue: string): Promi
     showActionHighlight([rect.left, rect.top, rect.width, rect.height]);
 
     setNativeValue(htmlEl, ephemeralSecret);
+
+    if ((htmlEl as HTMLInputElement | HTMLTextAreaElement).value !== ephemeralSecret) {
+      throw new Error('Fill secret action failed: Element value did not update.');
+    }
   } finally {
     // Invariant I9: Zeroize secret variable immediately
     ephemeralSecret = '0000000000000000';

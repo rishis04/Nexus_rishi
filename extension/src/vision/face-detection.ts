@@ -37,7 +37,8 @@ export async function initFaceDetector(): Promise<FaceDetector | null> {
   try {
     const vision = await FilesetResolver.forVisionTasks(wasmPath);
 
-    const modelResp = await fetch(modelPath);
+    const loadLocal = globalThis.fetch;
+    const modelResp = await loadLocal(modelPath);
     if (!modelResp.ok) {
       console.warn('[FaceDetection] Failed to fetch model:', modelResp.status, modelPath);
       return null;
@@ -51,7 +52,7 @@ export async function initFaceDetector(): Promise<FaceDetector | null> {
           delegate: 'GPU',
         },
         runningMode: 'IMAGE',
-        minDetectionConfidence: 0.25,
+        minDetectionConfidence: 0.6,
         minSuppressionThreshold: 0.4,
       });
       faceDetectorUsesGpu = true;
@@ -63,7 +64,7 @@ export async function initFaceDetector(): Promise<FaceDetector | null> {
           delegate: 'CPU',
         },
         runningMode: 'IMAGE',
-        minDetectionConfidence: 0.25,
+        minDetectionConfidence: 0.6,
         minSuppressionThreshold: 0.4,
       });
       faceDetectorUsesGpu = false;

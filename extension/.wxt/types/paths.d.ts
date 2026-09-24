@@ -15,6 +15,10 @@ declare module "wxt/browser" {
     | "/models/blaze_face_full_range.tflite"
     | "/models/blaze_face_short_range.tflite"
     | "/offscreen.html"
+    | "/onnx/ort-wasm-simd-threaded.asyncify.wasm"
+    | "/onnx/ort-wasm-simd-threaded.jsep.wasm"
+    | "/onnx/ort-wasm-simd-threaded.jspi.wasm"
+    | "/onnx/ort-wasm-simd-threaded.wasm"
     | "/sidepanel.html"
   type HtmlPublicPath = Extract<PublicPath, `${string}.html`>
   export interface WxtRuntime {

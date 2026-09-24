@@ -72,7 +72,7 @@ async function test() {
     // Wait 2 seconds for full execution flow
     await sidepanelPage.waitForTimeout(2500);
 
-    const artifactDir = '/home/agent-s/.gemini/antigravity-ide/brain/9f41885c-f30a-4944-81e6-6a1a6b9e4ba2';
+    const artifactDir = '/Users/rishis/.gemini/antigravity-ide/brain/28535f6b-3fee-4397-bc83-4e2b8747aaad';
     await sidepanelPage.screenshot({ path: `${artifactDir}/sidepanel_success.png` });
     await page.screenshot({ path: `${artifactDir}/demo_authenticated.png` });
     console.log('✓ Updated screenshots captured in artifact directory');

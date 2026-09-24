@@ -50,30 +50,63 @@ export async function sendPlan(attested: AttestedPayload): Promise<PlanResponse>
     // If mock mode is enabled and server is offline, return deterministic mock action
     if (flags.server === 'mock') {
       const parsedContext = JSON.parse(attested.body);
-      const buttonRegion = parsedContext.regions?.find(
-        (r: any) => r.type === 'button' || (r.text && r.text.toLowerCase().includes('sign in') || r.text?.toLowerCase().includes('login'))
-      );
+      const origin = parsedContext.page.origin;
+      const isLocal = origin.includes('localhost') || origin.includes('127.0.0.1');
 
-      const targetRegionId = buttonRegion ? buttonRegion.region_id : (parsedContext.regions?.[0]?.region_id || 'r1');
+      if (!isLocal) {
+        return {
+          request_id: attested.request_id,
+          status: 'fail',
+          message: 'Mock planner is not allowed to generate uncontrolled actions on real websites. Please start the real planner server.',
+          usage: { server_ms: 0, model: 'mock-planner' },
+        };
+      }
+
+      const task = (parsedContext.task || '').toLowerCase();
+      
+      let mockAction: any = {
+        action_id: `act_${Date.now()}`,
+        request_id: attested.request_id,
+        action: 'click',
+        params: null,
+        capability: null,
+        origin: origin,
+        frame_id: parsedContext.page.frame_ids?.[0] || 'main',
+        page_state_hash: parsedContext.page.page_state_hash,
+        rationale: 'Mock planner: default fallback',
+      };
+
+      if (task.includes('scroll')) {
+        mockAction.action = 'scroll';
+        mockAction.params = { direction: task.includes('up') ? 'up' : 'down', amount: 300 };
+        mockAction.rationale = 'Mock planner: inferred scroll intent';
+      } else if (task.includes('type') || task.includes('enter') || task.includes('fill')) {
+        const inputRegion = parsedContext.regions?.find((r: any) => r.type === 'input' || r.type === 'textarea');
+        if (inputRegion) {
+          mockAction.action = 'type';
+          mockAction.target = { region_id: inputRegion.region_id };
+          mockAction.params = { text: 'mock input' };
+          mockAction.rationale = 'Mock planner: inferred type intent';
+        }
+      } else if (task.includes('back')) {
+        mockAction.action = 'back';
+        mockAction.rationale = 'Mock planner: inferred back intent';
+      } else {
+        const buttonRegion = parsedContext.regions?.find(
+          (r: any) => r.type === 'button' || (r.text && r.text.toLowerCase().includes('sign in') || r.text?.toLowerCase().includes('login'))
+        );
+        const targetRegionId = buttonRegion ? buttonRegion.region_id : (parsedContext.regions?.[0]?.region_id || 'r1');
+        mockAction.target = { region_id: targetRegionId };
+        mockAction.rationale = 'Mock planner: inferred click on button';
+      }
 
       return {
         request_id: attested.request_id,
         status: 'action',
-        action: {
-          action_id: `act_${Date.now()}`,
-          request_id: attested.request_id,
-          action: 'click',
-          target: { region_id: targetRegionId },
-          params: null,
-          capability: null,
-          origin: parsedContext.page.origin,
-          frame_id: parsedContext.page.frame_ids[0] || 'main',
-          page_state_hash: parsedContext.page.page_state_hash,
-          rationale: 'Mock planner: Click primary action button',
-        },
-        message: 'Mock plan response generated',
+        action: mockAction,
+        message: 'Mock plan response generated safely',
         usage: {
-          server_ms: 45,
+          server_ms: 10,
           model: 'mock-planner',
         },
       };
