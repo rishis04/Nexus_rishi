@@ -159,6 +159,7 @@ export const OcrTokenSchema = z.object({
 export const FaceBoxSchema = z.object({
   bbox: BBoxSchema,
   confidence: z.number(),
+  coordinateSpace: z.literal('frame'),
 }).strict();
 
 export const PiiTypeSchema = z.enum([

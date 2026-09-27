@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import type { OrchestratorState } from '@contracts/index.js';
 
 interface TaskBarProps {
   state: OrchestratorState;
-  onStart: (taskText: string) => void;
+  onStart: () => void;
   onCancel: () => void;
   onConfirm: (confirmed: boolean) => void;
   requiresConfirmation: boolean;
@@ -18,8 +18,6 @@ export const TaskBar: React.FC<TaskBarProps> = ({
   requiresConfirmation,
   confirmationText,
 }) => {
-  const [taskInput, setTaskInput] = useState('Click the Login button');
-
   const isRunning =
     state !== 'IDLE' &&
     state !== 'DONE' &&
@@ -29,22 +27,16 @@ export const TaskBar: React.FC<TaskBarProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (taskInput.trim()) {
-      onStart(taskInput.trim());
+    if (!isRunning) {
+      onStart();
     }
   };
 
   return (
     <div style={{ padding: '12px', borderBottom: '1px solid var(--card-border)' }}>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <input
-            type="text"
-            value={taskInput}
-            onChange={(e) => setTaskInput(e.target.value)}
-            placeholder="Enter browser task..."
-            disabled={isRunning}
-            aria-label="Browser task instruction"
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div
             style={{
               flex: 1,
               padding: '8px 10px',
@@ -53,17 +45,18 @@ export const TaskBar: React.FC<TaskBarProps> = ({
               background: 'var(--card-bg)',
               color: 'var(--fg)',
               fontSize: '13px',
-              outline: 'none',
             }}
-          />
+          >
+            {isRunning ? 'Status: ● PROTECTING' : 'Status: ○ IDLE'}
+          </div>
           {!isRunning ? (
             <button
               type="submit"
               onClick={(e) => {
                 e.preventDefault();
-                if (taskInput.trim()) onStart(taskInput.trim());
+                onStart();
               }}
-              aria-label="Start Task"
+              aria-label="Start Protection"
               style={{
                 padding: '8px 14px',
                 borderRadius: 'var(--radius)',
@@ -74,13 +67,13 @@ export const TaskBar: React.FC<TaskBarProps> = ({
                 cursor: 'pointer',
               }}
             >
-              Run
+              Start
             </button>
           ) : (
             <button
               type="button"
               onClick={onCancel}
-              aria-label="Stop Task"
+              aria-label="Stop Protection"
               style={{
                 padding: '8px 14px',
                 borderRadius: 'var(--radius)',

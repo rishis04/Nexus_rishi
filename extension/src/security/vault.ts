@@ -32,21 +32,38 @@ async function getDB(): Promise<IDBPDatabase> {
 
 /**
  * Derives or generates a local 256-bit AES-GCM master encryption key.
+ * The key is generated on-the-fly and stored securely in chrome.storage.session,
+ * which is memory-only and inaccessible to other extensions.
  */
 async function getMasterKey(): Promise<CryptoKey> {
   if (masterKey) return masterKey;
 
-  // Derive a persistent master key using Web Crypto Subtle
-  const rawKey = new Uint8Array([
-    0x53, 0x49, 0x48, 0x32, 0x36, 0x31, 0x37, 0x31,
-    0x5f, 0x56, 0x41, 0x55, 0x4c, 0x54, 0x5f, 0x4b,
-    0x45, 0x59, 0x5f, 0x32, 0x30, 0x32, 0x36, 0x5f,
-    0x45, 0x4e, 0x54, 0x45, 0x52, 0x50, 0x52, 0x49
-  ]);
+  // Try to retrieve existing key from session storage
+  const storageResult = await chrome.storage.session.get('vaultMasterKey');
+  let rawKey: Uint8Array;
+
+  if (storageResult.vaultMasterKey) {
+    rawKey = new Uint8Array(storageResult.vaultMasterKey);
+  } else {
+    // Generate a fresh random key on-the-fly
+    rawKey = new Uint8Array(32);
+    crypto.getRandomValues(rawKey);
+    // Store it in session storage (memory only)
+    await chrome.storage.session.set({ vaultMasterKey: Array.from(rawKey) });
+    
+    // Since the key is fresh, old ciphertexts in IndexedDB are unrecoverable.
+    // Clear the DB to maintain integrity.
+    try {
+      const db = await getDB();
+      await db.clear(STORE_NAME);
+    } catch (e) {
+      console.warn('[Vault] Failed to clear old database entries', e);
+    }
+  }
 
   masterKey = await crypto.subtle.importKey(
     'raw',
-    rawKey,
+    rawKey as unknown as BufferSource,
     { name: 'AES-GCM' },
     false,
     ['encrypt', 'decrypt']

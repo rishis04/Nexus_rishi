@@ -23,7 +23,8 @@ export interface OcrToken {
 export interface FaceBox {
   bbox: BBox;
   confidence: number;
-} // CSS px
+  coordinateSpace: 'frame';
+} // CSS px relative to frame
 
 export interface VisionRequest {
   cycle_id: string;

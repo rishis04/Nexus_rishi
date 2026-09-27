@@ -1,12 +1,12 @@
 import { defineBackground } from 'wxt/sandbox';
 import { bus } from '@contracts/index.js';
-import { getUiState, orchestrator } from '../src/background/orchestrator.js';
+import { getUiState, privacyController, wakePrivacyLoop } from '../src/background/privacy-controller.js';
 import { dirtyTracker } from '../src/perception/dirty-region/tracker.js';
 import { telemetrySink } from '../src/telemetry/sink.js';
 
 export default defineBackground(() => {
   // Top-level synchronous message listener registration (MV3 requirement)
-  bus.on('task/start', async (payload, sender) => {
+  bus.on('privacy/start', async (payload, sender) => {
     let tabId = payload.tab_id;
 
     if (!tabId && typeof chrome !== 'undefined' && chrome.tabs?.query) {
@@ -29,18 +29,18 @@ export default defineBackground(() => {
       }
     }
 
-    console.log('[SW] Starting task:', payload.task_text, 'on tabId:', tabId);
-    const taskId = await orchestrator.startTask(payload.task_text, tabId || 0);
+    console.log('[SW] Starting protection on tabId:', tabId);
+    const taskId = await privacyController.startProtection(tabId || 0);
     return { task_id: taskId };
   });
 
-  bus.on('task/cancel', async (payload) => {
-    await orchestrator.cancelTask(payload.task_id);
+  bus.on('privacy/stop', async (payload) => {
+    await privacyController.stopProtection(payload.task_id);
     return { cancelled: true };
   });
 
   bus.on('task/confirm', async (payload) => {
-    await orchestrator.confirmTaskAction(payload.task_id, payload.confirmed);
+    // Left for schema compatibility; not functionally used in privacy-only mode
     return { acknowledged: true };
   });
 
@@ -50,6 +50,8 @@ export default defineBackground(() => {
 
   bus.on('dom/dirty', async (payload) => {
     dirtyTracker.add(payload as any);
+    // Wake the privacy loop immediately so masks are refreshed after scroll/mutation
+    wakePrivacyLoop();
     return { received: true };
   });
 

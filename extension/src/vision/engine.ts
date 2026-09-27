@@ -1,10 +1,26 @@
 import * as ort from 'onnxruntime-web/webgpu';
 import Tesseract from 'tesseract.js';
-import {
-  initFaceDetector,
-  detectFaces,
-  faceDetectorUsesGpu
-} from './face-detection';
+import { YuNetVisionEngine } from './yunet/yunet-engine.js';
+import { YUNET_STANDARD_CONFIG } from './yunet/yunet-config.js';
+
+let yuNetDetector: YuNetVisionEngine | null = null;
+async function getYuNetDetector(): Promise<YuNetVisionEngine> {
+  if (!yuNetDetector) {
+    const modelPath = typeof chrome !== 'undefined' && chrome.runtime?.getURL 
+      ? chrome.runtime.getURL('models/face_detection_yunet_2026may.onnx')
+      : '/models/face_detection_yunet_2026may.onnx';
+    
+    yuNetDetector = new YuNetVisionEngine({
+      modelPath,
+      inputSize: YUNET_STANDARD_CONFIG.inputSize,
+      scoreThreshold: YUNET_STANDARD_CONFIG.scoreThreshold,
+      nmsThreshold: YUNET_STANDARD_CONFIG.nmsThreshold,
+      topK: YUNET_STANDARD_CONFIG.topK
+    });
+    await yuNetDetector.initialize();
+  }
+  return yuNetDetector;
+}
 import { performSpatialFusion } from './grounding';
 import { initUIDetector, detectUIComponents, uiDetectorUsesGpu } from './ui-detection';
 import type {
@@ -52,9 +68,9 @@ export const visionEngine = {
     // Phase 3: Hardware-Accelerated Face & UI Detection via ONNX WebGPU / MediaPipe
     if (req.image_data_url) {
       try {
-        // 1. Try local MediaPipe Face Detection
+        // 1. Try local YuNet Face Detection
         try {
-          const detector = await initFaceDetector();
+          const detector = await getYuNetDetector();
           if (detector) {
             // Decode image without network requests (Invariant I5)
             const base64Data = (req.image_data_url || '').split(',')[1] || '';
@@ -80,17 +96,38 @@ export const visionEngine = {
                 const scaleX = viewportW / bitmapW;
                 const scaleY = viewportH / bitmapH;
 
+                // Phase 3: Extract selective bounding boxes for high-res YuNet tiling
+                const selectiveRegions: { x: number; y: number; w: number; h: number }[] = [];
+                if (req.dom?.elements) {
+                  for (const el of req.dom.elements) {
+                    if (
+                      el.tag === 'img' ||
+                      el.tag === 'canvas' ||
+                      el.tag === 'video' ||
+                      el.has_bg_image ||
+                      (el.classes && el.classes.some(c => c.toLowerCase().includes('avatar') || c.toLowerCase().includes('profile')))
+                    ) {
+                      selectiveRegions.push({
+                        x: Math.max(0, el.bbox[0] / scaleX),
+                        y: Math.max(0, el.bbox[1] / scaleY),
+                        w: Math.min(bitmapW, el.bbox[2] / scaleX),
+                        h: Math.min(bitmapH, el.bbox[3] / scaleY)
+                      });
+                    }
+                  }
+                }
+
                 const tInfer0 = performance.now();
-                faces = await detectFaces(detector, imgBitmap, scaleX, scaleY);
+                faces = await detector.detect(imgBitmap, scaleX, scaleY, selectiveRegions);
                 inferenceMs = performance.now() - tInfer0;
 
                 imgBitmap.close();
-                webgpuUsed = faceDetectorUsesGpu;
+                webgpuUsed = detector.usesGpu;
               }
             }
           }
         } catch (e) {
-          console.warn('[VisionEngine] MediaPipe face detection failed or unavailable:', e);
+          console.warn('[VisionEngine] YuNet face detection failed or unavailable:', e);
         }
 
         // 2. Try ONNX UI Component Detection (Phase 2)
@@ -214,6 +251,8 @@ export const visionEngine = {
     // Apply IoU Spatial Fusion
     const domRegions = (req as any).dom?.regions || [];
     const fusedRegions = performSpatialFusion(domRegions, regions, ocr_tokens, 0.5);
+
+    console.log(`[PERCEPTION] VisionEngine perceive returning faces: ${faces.length}`);
 
     return {
       cycle_id: req.cycle_id,

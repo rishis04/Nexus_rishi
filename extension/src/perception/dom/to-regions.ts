@@ -54,6 +54,14 @@ export function domElementToPerceptionRegion(
     }
   }
 
+  // Phase 2: Add other attributes to the searchable text space
+  if (el.attributes) {
+    const attrVals = Object.values(el.attributes).filter(Boolean);
+    if (attrVals.length > 0) {
+      text = (text ? text + ' ' : '') + attrVals.join(' ');
+    }
+  }
+
   return {
     region_id: '', // Minted by assembleFrame()
     local_key: el.dom_id,

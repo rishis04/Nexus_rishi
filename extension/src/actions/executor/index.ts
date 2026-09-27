@@ -77,8 +77,8 @@ export async function executeAction(
       }
 
       case 'navigate': {
-        if (!action.params?.url) throw new Error('Navigate requires a url parameter');
-        window.location.href = action.params.url;
+        if (!(action.params as any)?.url) throw new Error('Navigate requires a url parameter');
+        window.location.href = (action.params as any).url;
         break;
       }
 
@@ -104,12 +104,34 @@ export async function executeAction(
       new_page_state_hash: freshSnapshot.page_state_hash,
     };
   } catch (err: any) {
+    // Phase 15: Safe Error Normalization
+    // Log the internal diagnostic error to the console for debugging but DO NOT expose to the Agent.
+    console.error('[Action Executor] Internal Execution Error:', err);
+
+    let safeErrorCode: any = 'INTERNAL';
+    let safeMessage = 'Action execution failed due to an internal browser error.';
+
+    const errMsg = err?.message || String(err);
+    if (errMsg.includes('requires a target element')) {
+      safeErrorCode = 'TARGET_NOT_FOUND';
+      safeMessage = 'The requested action requires a target region that was not found or provided.';
+    } else if (errMsg.includes('requires a url')) {
+      safeErrorCode = 'INTERNAL';
+      safeMessage = 'The requested navigation action requires a valid URL.';
+    } else if (errMsg.includes('Unsupported action type')) {
+      safeErrorCode = 'INTERNAL';
+      safeMessage = 'The requested action type is not supported.';
+    } else if (errMsg.includes('fill_secret requires a resolved secret')) {
+      safeErrorCode = 'INTERNAL';
+      safeMessage = 'The secret could not be resolved for filling.';
+    }
+
     return {
       ok: false,
       action_id: action.action_id,
       navigated: false,
       new_page_state_hash: null,
-      error: stageError('INTERNAL', 'execute', err.message || String(err)),
+      error: stageError(safeErrorCode, 'execute', safeMessage),
     };
   }
 }

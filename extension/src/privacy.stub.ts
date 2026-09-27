@@ -79,6 +79,8 @@ export function validateIndianPAN(panStr: string): boolean {
   return /^[A-Z]{3}[PCHFATBLJG][A-Z]\d{4}[A-Z]$/.test(clean);
 }
 
+import { redactImageWebGPU } from './webgpu-redact.js';
+
 /**
  * Canvas-based visual blackout redaction for sensitive bounding boxes.
  */
@@ -87,8 +89,10 @@ export async function redactImageCanvas(
   boxesToRedact: { x: number; y: number; w: number; h: number; label: string; source?: string }[],
   viewport?: { w: number; h: number }
 ): Promise<string> {
+  console.log(`[PRIVACY_RUNTIME_05_REDACTION_ENTER] boxes=${boxesToRedact.length} inputLength=${dataUrl.length}`);
+  
   if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap === 'undefined') {
-    return dataUrl;
+    throw new Error('Canvas API not available for redaction');
   }
 
   try {
@@ -100,96 +104,116 @@ export async function redactImageCanvas(
     for (let i = 0; i < len; i++) {
       bytes[i] = binaryStr.charCodeAt(i);
     }
-    // Detect MIME type from the data-URL prefix; default to png.
-    // Chrome's captureVisibleTab produces PNG; forcing JPEG corrupts the decode.
     const mimeMatch = dataUrl.match(/^data:([^;,]+)/);
     const mimeType = mimeMatch?.[1] || 'image/png';
     const blob = new Blob([bytes], { type: mimeType });
     const bitmap = await createImageBitmap(blob);
 
-    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return dataUrl;
-
-    ctx.drawImage(bitmap, 0, 0);
-
-    // Compute coordinate scale factors between CSS viewport and physical bitmap
     const scaleX = viewport?.w && viewport.w > 0 ? bitmap.width / viewport.w : 1;
     const scaleY = viewport?.h && viewport.h > 0 ? bitmap.height / viewport.h : 1;
+    
+    console.log(`[PRIVACY_RUNTIME_05_REDACTION_METADATA] bitmap=${bitmap.width}x${bitmap.height} viewport=${viewport?.w}x${viewport?.h} scaleX=${scaleX.toFixed(3)} scaleY=${scaleY.toFixed(3)}`);
 
-    for (const box of boxesToRedact) {
-      // 4px CSS safety padding scaled to physical bitmap pixels
-      const padX = 4 * scaleX;
-      const padY = 4 * scaleY;
+    const boxes = [];
+    for (let i = 0; i < boxesToRedact.length; i++) {
+      const box = boxesToRedact[i]!;
       
-      const rawTop = Math.round(box.y * scaleY - padY);
+      const rawTop = Math.round(box.y * scaleY);
       const ry = Math.max(0, rawTop);
       const clippedTop = ry - rawTop;
       
-      const rx = Math.max(0, Math.round(box.x * scaleX - padX));
-      
-      const rw = Math.min(bitmap.width - rx, Math.round(box.w * scaleX + padX * 2));
-      const rawHeight = Math.round(box.h * scaleY + padY * 2);
+      const rx = Math.max(0, Math.round(box.x * scaleX));
+      const rw = Math.min(bitmap.width - rx, Math.round(box.w * scaleX));
+      const rawHeight = Math.round(box.h * scaleY);
       const rh = Math.min(bitmap.height - ry, rawHeight - clippedTop);
+      
+      boxes.push({ rx, ry, rw, rh, label: box.label, i });
+    }
 
-      // Solid black privacy rectangle
+    // Try WebGPU hardware acceleration (Temporarily disabled to preserve visual text labels)
+    /*
+    const tStartGPU = performance.now();
+    const gpuBlob = await redactImageWebGPU(bitmap, boxes);
+    if (gpuBlob) {
+      console.log(`[WebGPU] Redaction completed in ${(performance.now() - tStartGPU).toFixed(2)}ms`);
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(gpuBlob);
+      });
+    }
+    */
+
+    // Fallback to 2D Canvas
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Failed to get 2d context from OffscreenCanvas');
+
+    ctx.drawImage(bitmap, 0, 0);
+
+    for (let i = 0; i < boxes.length; i++) {
+      const { rx, ry, rw, rh, label, i: origIdx } = boxes[i]!;
+      const box = boxesToRedact[origIdx]!;
+      
+      console.log(`[PRIVACY_RUNTIME_07_MASK_OPERATION_FALLBACK] index=${origIdx} label=${box.label} sourceX=${box.x} sourceY=${box.y} sourceW=${box.w} sourceH=${box.h} destX=${rx} destY=${ry} destW=${rw} destH=${rh}`);
+
       ctx.fillStyle = '#000000';
       ctx.fillRect(rx, ry, rw, rh);
 
-      // Red border and label
       ctx.strokeStyle = '#ef4444';
       ctx.lineWidth = Math.max(2, Math.round(2 * Math.min(scaleX, scaleY)));
       ctx.strokeRect(rx, ry, rw, rh);
 
-      // Display the explicit redaction process taking place
       let labelText = '';
       const norm = (box.label || '').toUpperCase();
-      if (rw < 110) {
-        labelText = norm.includes('FACE') ? '[FACE]' : `[${norm}]`;
-      } else if (norm.includes('AADHAAR')) {
-        labelText = '[REDACTED: AADHAAR | Verhoeff D5 Checksum]';
+      if (norm.includes('AADHAAR')) {
+        labelText = '[REDACTED: AADHAAR]';
       } else if (norm.includes('PAN')) {
-        labelText = '[REDACTED: PAN | ITD Entity Validation]';
+        labelText = '[REDACTED: PAN]';
       } else if (norm.includes('EMAIL')) {
-        labelText = '[REDACTED: EMAIL | RFC-5322 Regex Scan]';
+        labelText = '[REDACTED: EMAIL]';
       } else if (norm.includes('PASSWORD')) {
-        labelText = '[REDACTED: PASSWORD | Vault fill_secret]';
+        labelText = '[REDACTED: PASSWORD]';
       } else if (norm.includes('PHONE')) {
-        labelText = '[REDACTED: PHONE | E.164 Telephony Engine]';
+        labelText = '[REDACTED: PHONE]';
       } else if (norm.includes('FACE')) {
-        labelText = '[REDACTED: FACE | 2D Canvas Blackout]';
+        labelText = '[REDACTED: FACE]';
       } else {
         labelText = `[REDACTED: ${norm}]`;
       }
 
-      let fontSize = Math.max(9, Math.round(10 * Math.min(scaleX, scaleY)));
+      let fontSize = Math.max(10, Math.round(12 * Math.min(scaleX, scaleY)));
       ctx.font = `bold ${fontSize}px monospace`;
-      if (ctx.measureText(labelText).width > rw - 8) {
-        labelText = `[REDACTED: ${norm}]`;
-        if (ctx.measureText(labelText).width > rw - 8) {
-          labelText = `[${norm}]`;
-        }
-      }
-
+      
+      const textWidth = ctx.measureText(labelText).width;
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(
-        labelText,
-        rx + Math.max(4, Math.round(4 * scaleX)),
-        ry + Math.max(12, Math.round(14 * scaleY))
-      );
+      
+      // If the text is wider than the box, draw it above the box to ensure it remains legible
+      if (textWidth > rw - 4 && ry > fontSize + 4) {
+        ctx.fillText(labelText, rx, ry - 4);
+      } else {
+        ctx.fillText(labelText, rx + Math.max(2, Math.round(4 * scaleX)), ry + Math.max(12, Math.round(14 * scaleY)));
+      }
     }
 
     const blobOut = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
     const arrayBuffer = await blobOut.arrayBuffer();
     const uint8 = new Uint8Array(arrayBuffer);
+    
     let binary = '';
-    for (let i = 0; i < uint8.length; i++) {
-      binary += String.fromCharCode(uint8[i]!);
+    const chunkSize = 0x8000;
+    for (let i = 0; i < uint8.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, Array.from(uint8.subarray(i, i + chunkSize)));
     }
-    return `data:image/jpeg;base64,${btoa(binary)}`;
+    
+    const outputDataUrl = `data:image/jpeg;base64,${btoa(binary)}`;
+    console.log(`[PRIVACY_RUNTIME_06_REDACTION_OUTPUT] success=true inputBytes=${bytes.length} outputBytes=${uint8.length}`);
+    return outputDataUrl;
   } catch (err) {
-    console.warn('Canvas redaction fallback', err);
-    return dataUrl;
+    console.warn('[Privacy Engine] Canvas redaction failed:', err);
+    console.log(`[PRIVACY_RUNTIME_06_REDACTION_OUTPUT] success=false error=${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`Redaction failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -281,11 +305,11 @@ export const privacyStub = {
     const boxesToMask: { x: number; y: number; w: number; h: number; label: string; source?: string }[] = [];
     let totalMaskedAreaPx = 0;
 
-    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
     const aadhaarRegex = /\b[2-9]\d{3}[\s-]?\d{4}[\s-]?\d{4}\b/g;
-    const panRegex = /\b[a-zA-Z]{5}\d{4}[a-zA-Z]\b/g;
-    // Strict Indian E.164 phone pattern: exactly 10 digits starting with 6-9, bounded so it never matches 12-digit numbers
-    const phoneRegex = /(?<!\d)(?:(?:\+91|0)[\s-]?)?[6-9]\d{4}[\s-]?\d{5}(?!\d)|(?<!\d)(?:(?:\+91|0)[\s-]?)?[6-9]\d{9}(?!\d)/g;
+    const panRegex = /\b[A-Za-z]{5}\d{4}[A-Za-z]\b/g;
+    // Strict Indian E.164 phone pattern: supports +91, 0, spaces, dashes, exactly 10 core digits, not embedded in longer numbers
+    const phoneRegex = /(?<!\d)(?:(?:\+91|0)[\s-]?)?[6-9](?:[\s-]?\d){9}(?!\d)/g;
 
     const sanitizedRegions: SanitizedRegion[] = req.frame.regions.map((reg) => {
       let sanitizedText = reg.text;
@@ -302,48 +326,60 @@ export const privacyStub = {
       const elId = ((domEl as any)?.id || '').toLowerCase();
       const regText = (reg.text || '').toLowerCase();
 
+      const isInputSemantics = reg.semantic_type === 'input' || domEl?.tag === 'input' || domEl?.tag === 'textarea' || domEl?.role === 'textbox' || domEl?.tag === 'select' || domEl?.tag === 'label' || domEl?.role === 'radio' || domEl?.role === 'checkbox';
+
       const isAadhaarField =
-        reg.semantic_type === 'input' &&
+        isInputSemantics &&
         (regText.includes('aadhaar') ||
           regText.includes('aadhar') ||
           elAccessibleName.includes('aadhaar') ||
           elAccessibleName.includes('aadhar') ||
           elInputName.includes('aadhaar') ||
           elInputName.includes('aadhar') ||
+          elPlaceholder.includes('aadhaar') ||
           elPlaceholder.includes('xxxx') ||
-          elId.includes('aadhaar'));
+          elId.includes('aadhaar') ||
+          elId.includes('aadhar'));
 
       const isPanField =
-        reg.semantic_type === 'input' &&
+        isInputSemantics &&
         !isAadhaarField &&
         (regText.includes('pan') ||
           elAccessibleName.includes('pan') ||
           elInputName.includes('pan') ||
-          elId.includes('pan'));
+          elId.includes('pan') ||
+          elPlaceholder.includes('pan'));
 
       const isPassword =
-        reg.semantic_type === 'input' &&
+        isInputSemantics &&
         (regText.includes('password') ||
           elAccessibleName.includes('password') ||
           elInputName.includes('password') ||
+          elId.includes('password') ||
+          elPlaceholder.includes('password') ||
           Boolean(domEl?.input?.is_password));
 
       const isPhoneField =
-        reg.semantic_type === 'input' &&
+        isInputSemantics &&
         !isAadhaarField &&
         !isPanField &&
         (regText.includes('phone') ||
           regText.includes('mobile') ||
+          regText.includes('contact') ||
           elAccessibleName.includes('phone') ||
           elAccessibleName.includes('mobile') ||
+          elAccessibleName.includes('contact') ||
           elInputName.includes('phone') ||
           elInputName.includes('mobile') ||
           elId.includes('phone') ||
           elId.includes('mobile') ||
-          domEl?.input?.type === 'tel');
+          elPlaceholder.includes('phone') ||
+          elPlaceholder.includes('mobile') ||
+          domEl?.input?.type === 'tel' ||
+          domEl?.input?.type === 'number');
 
       const isEmailField =
-        reg.semantic_type === 'input' &&
+        isInputSemantics &&
         !isAadhaarField &&
         !isPanField &&
         !isPassword &&
@@ -357,40 +393,36 @@ export const privacyStub = {
           elPlaceholder.includes('email') ||
           elPlaceholder.includes('mail') ||
           elId.includes('email') ||
+          elId.includes('mail') ||
           domEl?.input?.type === 'email');
 
-      // Check if any detected face intersects this region
-      const containsFace = req.frame.faces?.some((face) => {
-        const intersectionArea =
-          Math.max(0, Math.min(reg.bbox[0] + reg.bbox[2], face.bbox[0] + face.bbox[2]) - Math.max(reg.bbox[0], face.bbox[0])) *
-          Math.max(0, Math.min(reg.bbox[1] + reg.bbox[3], face.bbox[1] + face.bbox[3]) - Math.max(reg.bbox[1], face.bbox[1]));
-        const faceArea = face.bbox[2] * face.bbox[3];
-        return faceArea > 0 && intersectionArea / faceArea > 0.5; // Face is mostly inside this region
-      });
-
-      // Profile avatars are typically square-ish and between 24 and 256 pixels in size.
+      // Profile avatars are typically square-ish and between 24 and 512 pixels in size.
       // This generic geometry fallback helps when face detection fails on small avatars.
       const isAvatarGeometry = 
         reg.bbox[2] >= 24 && reg.bbox[2] <= 512 && 
         reg.bbox[3] >= 24 && reg.bbox[3] <= 512 && 
-        Math.abs(reg.bbox[2] - reg.bbox[3]) <= 12;
+        Math.abs(reg.bbox[2] - reg.bbox[3]) <= Math.max(16, reg.bbox[2] * 0.25);
+
+      const hasProfileKeyword = [elAccessibleName, elId, regText].some(text => 
+        text.includes('profile') || text.includes('avatar')
+      ) || (domEl?.classes || []).some((c: string) => {
+        const cl = c.toLowerCase();
+        return cl.includes('profile') || cl.includes('avatar');
+      });
+
+      const hasAvatarShapeKeyword = (domEl?.classes || []).some((c: string) => {
+        const cl = c.toLowerCase();
+        return cl.includes('circle') || cl.includes('round') || cl.includes('entity') || cl.includes('ghost');
+      });
 
       const isProfileImage =
-        (reg.semantic_type === 'image' || domEl?.tag === 'img' || domEl?.tag === 'svg' || (reg.semantic_type as any) === 'icon' || domEl?.has_bg_image) &&
-        (containsFace ||
-          isAvatarGeometry ||
-          elAccessibleName.includes('profile') ||
-          elAccessibleName.includes('avatar') ||
-          elAccessibleName.includes('photo') ||
-          elId.includes('profile') ||
-          elId.includes('avatar') ||
-          regText.includes('profile') ||
-          domEl?.classes?.some((c: string) => 
-            c.toLowerCase().includes('profile') || 
-            c.toLowerCase().includes('avatar') || 
-            c.toLowerCase().includes('photo') || 
-            c.toLowerCase().includes('ghost-person')
-          ));
+        (reg.semantic_type === 'image' || domEl?.tag === 'img' || domEl?.tag === 'canvas' || domEl?.has_bg_image) &&
+        isAvatarGeometry &&
+        (hasProfileKeyword || hasAvatarShapeKeyword);
+
+      // Prevent masking entire screen/images for non-visual PII (if a box is massive, don't visual-mask the whole thing)
+      // Limit to max 600px width/height or else it's likely a container.
+      const isSurgicallyMaskable = reg.bbox[2] < 800 && reg.bbox[3] < 600;
 
       // Direct semantic classification for form inputs
       if (isAadhaarField) {
@@ -578,7 +610,7 @@ export const privacyStub = {
         }
       }
 
-      if (regionHasPii && reg.bbox) {
+      if (regionHasPii && reg.bbox && isSurgicallyMaskable) {
         const isOCR = (reg as any).sources?.includes('OCR') || reg.source?.includes('OCR');
         boxesToMask.push({
           x: reg.bbox[0],
@@ -689,6 +721,21 @@ export const privacyStub = {
       issued_at: Date.now(),
     };
 
+    // Expose masks to DOM for E2E testing (only if running in a context with DOM)
+    if (typeof document !== 'undefined') {
+      let debugDiv = document.getElementById('antigravity-debug-masks');
+      if (!debugDiv) {
+        debugDiv = document.createElement('div');
+        debugDiv.id = 'antigravity-debug-masks';
+        debugDiv.style.display = 'none';
+        document.body.appendChild(debugDiv);
+      }
+      debugDiv.textContent = JSON.stringify(boxesToMask);
+    }
+
+    console.log(`[MASK] boxesToMask count before redactImageCanvas: ${boxesToMask.length}`);
+    console.log(`[PRIVACY] Face regions in req.frame.faces: ${req.frame.faces?.length || 0}`);
+
     let maskedDataUrl: string | null = null;
     if (boxesToMask.length > 0 && req.image_data_url) {
       try {
@@ -738,7 +785,7 @@ export const privacyStub = {
     }
 
     // 2. Check raw emails
-    const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    const emailMatch = text.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
     if (emailMatch && emailMatch.index !== undefined) {
       findings.push({
         type: 'EMAIL',
@@ -758,7 +805,7 @@ export const privacyStub = {
     }
 
     // 4. Check raw PAN numbers
-    const panMatches = text.matchAll(/\b[a-zA-Z]{3}[PCHFATBLJGpchfatbljg][a-zA-Z]\d{4}[a-zA-Z]\b/g);
+    const panMatches = text.matchAll(/\b[A-Za-z]{5}\d{4}[A-Za-z]\b/g);
     for (const match of panMatches) {
       if (match.index !== undefined && validateIndianPAN(match[0])) {
         findings.push({
@@ -770,7 +817,7 @@ export const privacyStub = {
 
     // 5. Check raw Indian phone numbers (must run AFTER other checks to avoid duplicate spans)
     if (findings.length === 0) {
-      const rawPhoneRegex = /(?<!\d)(?:(?:\+91|0)[\s-]?)?[6-9]\d{4}[\s-]?\d{5}(?!\d)/g;
+      const rawPhoneRegex = /(?<!\d)(?:(?:\+91|0)[\s-]?)?[6-9](?:[\s-]?\d){9}(?!\d)/g;
       const phoneMatch = text.match(rawPhoneRegex);
       if (phoneMatch) {
         const idx = text.search(rawPhoneRegex);

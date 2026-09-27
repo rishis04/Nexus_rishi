@@ -1,5 +1,6 @@
 import type { CaptureMeta } from '@contracts/index.js';
 
+const MOCK_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 let lastCaptureTime = 0;
 const MIN_INTERVAL_MS = 800; // Rate limit ~1.25 calls/s (safely below Chrome's 2 calls/s quota)
 

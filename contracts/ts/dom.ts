@@ -35,6 +35,7 @@ export interface DomElementInfo {
     has_value: boolean;
     value: string | null; // value is ALWAYS null for password inputs
   };
+  attributes?: Record<string, string>; // Phase 2: additional PII signals
   bbox: BBox;
   visible: boolean;
   in_viewport: boolean;

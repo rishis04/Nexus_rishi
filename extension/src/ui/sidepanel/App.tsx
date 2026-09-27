@@ -2,9 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { UiState } from '@contracts/index.js';
 import { bus } from '@contracts/index.js';
 import { TaskBar } from './TaskBar.js';
-import { StageTimeline } from './StageTimeline.js';
-import { RouteView } from './RouteView.js';
-import { ActionLog } from './ActionLog.js';
+import { VisualPreview } from './VisualPreview.js';
 import { NetworkStatus } from './NetworkStatus.js';
 
 export const App: React.FC = () => {
@@ -55,7 +53,7 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  const handleStart = async (taskText: string) => {
+  const handleStart = async () => {
     let tabId: number | undefined = undefined;
 
     if (typeof chrome !== 'undefined' && chrome.tabs?.query) {
@@ -80,13 +78,13 @@ export const App: React.FC = () => {
 
     setUiState((prev) => ({
       ...prev,
-      task_text: taskText,
+      task_text: 'Privacy Protection Active',
       state: 'PERCEIVING',
       last_error: null,
     }));
 
     try {
-      const res = await bus.send('task/start', { task_text: taskText, tab_id: tabId });
+      const res = await bus.send('privacy/start', { tab_id: tabId });
       if (res.ok) {
         setUiState((prev) => ({
           ...prev,
@@ -115,9 +113,9 @@ export const App: React.FC = () => {
 
   const handleCancel = async () => {
     try {
-      await bus.send('task/cancel', { task_id: uiState.task_id || '' });
+      await bus.send('privacy/stop', { task_id: uiState.task_id || '' });
     } catch (err) {
-      console.warn('[SidePanel] Failed to send cancel:', err);
+      console.warn('[SidePanel] Failed to send stop:', err);
     }
     setUiState((prev) => ({
       ...prev,
@@ -198,18 +196,8 @@ export const App: React.FC = () => {
         confirmationText={uiState.pending_action_description}
       />
 
-      {/* State Machine Progress */}
-      <StageTimeline state={uiState.state} stepIndex={uiState.step_index} />
-
-      {/* Confidence Router Breakdown */}
-      <RouteView routes={uiState.routes} />
-
-      {/* Action Firewall & Verification Verdict */}
-      <ActionLog
-        verdict={uiState.last_verdict}
-        action={uiState.last_action}
-        execResult={uiState.last_exec_result}
-      />
+      {/* Visual Masked Preview */}
+      <VisualPreview audit={uiState.privacy_audit} />
 
       {/* Network Security Gate & Redaction Proof */}
       <NetworkStatus

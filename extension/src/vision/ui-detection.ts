@@ -25,10 +25,17 @@ export async function initUIDetector(): Promise<ort.InferenceSession | null> {
   }
 
   try {
-    const loadLocal = globalThis.fetch;
-    const modelResp = await loadLocal(modelPath);
+    let modelResp: Response;
+    try {
+      const loadLocal = globalThis.fetch;
+      modelResp = await loadLocal(modelPath);
+    } catch (e) {
+      console.debug('[UIDetection] Model not found (this is expected until you drop ui_detector.onnx into public/models/)');
+      return null;
+    }
+
     if (!modelResp.ok) {
-      console.warn('[UIDetection] Model not found (this is expected until you drop ui_detector.onnx into public/models/)');
+      console.debug('[UIDetection] Model not found (this is expected until you drop ui_detector.onnx into public/models/)');
       return null;
     }
     const modelBuffer = await modelResp.arrayBuffer();

@@ -66,11 +66,11 @@ export interface UiState {
 }
 
 export interface MessageMap {
-  'task/start': {
-    payload: { task_text: string; tab_id?: number };
+  'privacy/start': {
+    payload: { tab_id?: number };
     response: { task_id: string };
   };
-  'task/cancel': {
+  'privacy/stop': {
     payload: { task_id: string };
     response: { cancelled: boolean };
   };

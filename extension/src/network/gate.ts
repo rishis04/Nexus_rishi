@@ -58,6 +58,7 @@ export async function sendPlan(attested: AttestedPayload): Promise<PlanResponse>
           request_id: attested.request_id,
           status: 'fail',
           message: 'Mock planner is not allowed to generate uncontrolled actions on real websites. Please start the real planner server.',
+          action: null,
           usage: { server_ms: 0, model: 'mock-planner' },
         };
       }

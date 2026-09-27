@@ -87,12 +87,12 @@ describe('Geometry utilities', () => {
 
 describe('Bus fallback and envelope', () => {
   it('registers and delivers messages across in-memory bus', async () => {
-    const unbind = bus.on('task/start', async (payload) => {
-      expect(payload.task_text).toBe('Test task');
+    const unbind = bus.on('privacy/start', async (payload) => {
+      expect(payload.tab_id).toBe(123);
       return { task_id: 'task_123' };
     });
 
-    const res = await bus.send('task/start', { task_text: 'Test task' });
+    const res = await bus.send('privacy/start', { tab_id: 123 });
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.data.task_id).toBe('task_123');
@@ -103,7 +103,7 @@ describe('Bus fallback and envelope', () => {
 
   it('returns error envelope if no handler registered', async () => {
     bus._clearLocalHandlers();
-    const res = await bus.send('task/cancel', { task_id: '123' });
+    const res = await bus.send('privacy/stop', { task_id: '123' });
     expect(res.ok).toBe(false);
     if (!res.ok) {
       expect(res.error.code).toBe('INTERNAL');

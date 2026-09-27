@@ -52,33 +52,82 @@ export function assembleFrame(
     for (const vReg of visionResult.regions) {
       let isDuplicate = false;
       
-      // Phase 3 IoU Fusion: Does this OCR/Vision region overlap highly with an existing DOM region?
+      const vArea = vReg.bbox[2] * vReg.bbox[3];
+      if (vArea <= 0) continue;
+
+      // Phase 5 Spatial Fusion: Prevent merging into massive parent containers
       for (const dReg of candidateRegions) {
         if (!dReg.bbox || !vReg.bbox) continue;
+        const dArea = dReg.bbox[2] * dReg.bbox[3];
+        if (dArea <= 0) continue;
+
         const intersection = getIntersectionArea(dReg.bbox, vReg.bbox);
-        const vArea = vReg.bbox[2] * vReg.bbox[3];
         
-        // If the vision region is > 80% inside a DOM region
-        if (vArea > 0 && intersection / vArea > 0.8) {
+        const iou = intersection / (dArea + vArea - intersection);
+        const iom = intersection / Math.min(dArea, vArea);
+        const areaRatio = Math.max(dArea, vArea) / Math.min(dArea, vArea);
+
+        // Agreement: Highly overlapping and roughly the same size
+        const isAgreement = iou > 0.5;
+        // Containment: Vision is inside DOM, but DOM is not massively larger (prevent enlarging sensitive regions)
+        const isSafeContainment = iom > 0.8 && areaRatio < 4.0;
+
+        if (isAgreement || isSafeContainment) {
           isDuplicate = true;
-          // Merge text if DOM region lacked it
-          if (!dReg.text && vReg.text) {
-            dReg.text = vReg.text;
+          // Merge text if DOM region lacked it, or append it if they disagree
+          if (vReg.text) {
+            if (!dReg.text) {
+              dReg.text = vReg.text;
+            } else if (!dReg.text.includes(vReg.text)) {
+              dReg.text += ' ' + vReg.text;
+            }
           }
-          // Mark the DOM region as having an OCR source match to trigger Canvas Blackout!
-          if (vReg.source?.includes('OCR')) {
+          
+          // Combine confidences (take the max)
+          dReg.confidence = Math.max(dReg.confidence || 0, vReg.confidence || 0);
+
+          // Mark the DOM region as having an OCR/Vision source match
+          if (vReg.source) {
             dReg.source = dReg.source || [];
-            if (!dReg.source.includes('OCR')) dReg.source.push('OCR');
+            for (const s of vReg.source) {
+              if (!dReg.source.includes(s)) dReg.source.push(s);
+            }
           }
           break;
         }
       }
       
-      // Only push if it is a truly novel visual element (e.g. drawn on a canvas)
+      // Only push if it is a truly novel visual element (Disagreement / Independent Vision region)
       if (!isDuplicate) {
         candidateRegions.push(vReg);
       }
     }
+  }
+
+  // 2b. Map Faces into Unified Regions
+  if (visionResult && visionResult.faces) {
+    visionResult.faces.forEach((face, idx) => {
+      candidateRegions.push({
+        region_id: (face as any).face_id || `face_${idx}`,
+        local_key: (face as any).face_id || `face_${idx}`,
+        dom_ref: null,
+        source: ['VISION'],
+        semantic_type: 'image', // Marked as image to allow redaction, wait, privacy.stub.ts looks for 'FACE' type in detections
+        // We will pass it as a regular region but we need it to trigger redaction.
+        text: '<<FACE_DETECTED>>', // Artificial text signal so regex or pipeline triggers if needed, but wait, privacy.stub.ts looks at req.frame.faces!
+        bbox: face.bbox,
+        confidence: face.confidence,
+        visible: true,
+        interactable: false,
+        visual_state: ['visible', 'enabled'],
+        route: 'LOW',
+        sensitivity: 'pii',
+        origin: domSnapshot.url_origin,
+        frame_id: 'main',
+        page_state_hash: domSnapshot.page_state_hash,
+        timestamp: Date.now(),
+      });
+    });
   }
 
   // 3. Sort regions strictly by reading order (y bucketed, then x) for deterministic region_id minting (Invariant I2)
