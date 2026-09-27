@@ -379,9 +379,22 @@ export class PerceptionDaemon implements IPerceptionPipeline {
 
         // Re-fetch DOM immediately after screenshot to minimize scroll lag mismatch
         const freshDomResp = await bus.send('dom/snapshot', {}, { tabId: session.tab_id, timeoutMs: 1000 }).catch(() => ({ ok: false, data: null }));
-        if (freshDomResp && freshDomResp.ok && freshDomResp.data) {
-          domSnapshot = freshDomResp.data;
+        
+        if (!freshDomResp || !freshDomResp.ok || !freshDomResp.data) {
+          // If DOM fetch fails, we are likely navigating. Abort the cycle.
+          console.warn('[PerceptionDaemon] Failed to fetch fresh DOM, likely navigating. Aborting cycle.');
+          broadcastUiState({ audit: null });
+          return { isBlocked: false, needsReperceive: true };
         }
+
+        if (freshDomResp.data.url_origin !== domSnapshot.url_origin || freshDomResp.data.url_path !== domSnapshot.url_path) {
+          // The page navigated between screenshot and fresh DOM fetch. Abort cycle.
+          console.warn('[PerceptionDaemon] Page navigated during capture. Aborting cycle.');
+          broadcastUiState({ audit: null });
+          return { isBlocked: false, needsReperceive: true };
+        }
+        
+        domSnapshot = freshDomResp.data;
       } catch (capErr) {
         console.warn('[PerceptionDaemon] captureScreenshot failed, using fallback:', capErr);
         await capSpan.end({ dpr: 1 });

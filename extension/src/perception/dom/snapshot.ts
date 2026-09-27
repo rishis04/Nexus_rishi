@@ -96,8 +96,8 @@ export async function extractDomSnapshot(
   const frameOffset = getLocalFrameOffset();
 
   const viewport = {
-    w: window.innerWidth,
-    h: window.innerHeight,
+    w: document.documentElement?.clientWidth || window.innerWidth,
+    h: document.documentElement?.clientHeight || window.innerHeight,
   };
 
   const frames: FrameInfo[] = [

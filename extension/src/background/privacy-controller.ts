@@ -86,8 +86,14 @@ async function runPrivacyLoop(session: TaskSession, abortController: AbortContro
         broadcastUiState,
       });
       
-      if (!res) {
+      if (!res || res.needsReperceive) {
         await interruptibleSleep(600, abortController.signal);
+        continue;
+      }
+
+      if (res.isBlocked) {
+        // Handled by UI broadcast within perception-daemon, just wait
+        await interruptibleSleep(1000, abortController.signal);
         continue;
       }
       
