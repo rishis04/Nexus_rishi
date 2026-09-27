@@ -384,14 +384,14 @@ export class PerceptionDaemon implements IPerceptionPipeline {
           // If DOM fetch fails, we are likely navigating. Abort the cycle.
           console.warn('[PerceptionDaemon] Failed to fetch fresh DOM, likely navigating. Aborting cycle.');
           broadcastUiState({ audit: null });
-          return { isBlocked: false, needsReperceive: true };
+          return { isBlocked: false, needsReperceive: true } as unknown as PerceptionCycleResult;
         }
 
         if (freshDomResp.data.url_origin !== domSnapshot.url_origin || freshDomResp.data.url_path !== domSnapshot.url_path) {
           // The page navigated between screenshot and fresh DOM fetch. Abort cycle.
           console.warn('[PerceptionDaemon] Page navigated during capture. Aborting cycle.');
           broadcastUiState({ audit: null });
-          return { isBlocked: false, needsReperceive: true };
+          return { isBlocked: false, needsReperceive: true } as unknown as PerceptionCycleResult;
         }
         
         domSnapshot = freshDomResp.data;
