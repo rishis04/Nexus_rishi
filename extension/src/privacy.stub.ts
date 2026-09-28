@@ -11,6 +11,8 @@ import type {
 } from '@contracts/index.js';
 import { canonicalJson, sha256Hex } from './security/sha256.js';
 import { encryptedVault } from './security/vault.js';
+import { classifyDomElement } from './privacy/semantic-pii-classifier.js';
+import { indianPiiRegistry } from './privacy/indian-pii-registry.js';
 
 /**
  * Verhoeff algorithm multiplication (d) and permutation (p) tables
@@ -312,19 +314,21 @@ export const privacyStub = {
     const phoneRegex = /(?<!\d)(?:(?:\+91|0)[\s-]?)?[6-9](?:[\s-]?\d){9}(?!\d)/g;
 
     const sanitizedRegions: SanitizedRegion[] = req.frame.regions.map((reg) => {
-      let sanitizedText = reg.text;
+      let sanitizedText = reg.text || reg.visual_text || reg.clean_text || '';
       let regionHasPii = false;
       let boxLabel = 'PII';
 
       // 0. Extract DOM element metadata to strictly identify form inputs
       const domEl = reg.local_key
         ? req.frame.dom?.elements?.find((e: any) => e.dom_id === reg.local_key)
-        : null;
+        : (reg as any).dom_id
+          ? req.frame.dom?.elements?.find((e: any) => e.dom_id === (reg as any).dom_id)
+          : null;
       const elAccessibleName = (domEl?.name || '').toLowerCase();
       const elInputName = (domEl?.input?.name || '').toLowerCase();
       const elPlaceholder = (domEl?.input?.placeholder || '').toLowerCase();
       const elId = ((domEl as any)?.id || '').toLowerCase();
-      const regText = (reg.text || '').toLowerCase();
+      const regText = (reg.text || reg.visual_text || reg.clean_text || '').toLowerCase();
 
       const isInputSemantics = reg.semantic_type === 'input' || domEl?.tag === 'input' || domEl?.tag === 'textarea' || domEl?.role === 'textbox' || domEl?.tag === 'select' || domEl?.tag === 'label' || domEl?.role === 'radio' || domEl?.role === 'checkbox';
 
@@ -359,10 +363,19 @@ export const privacyStub = {
           elPlaceholder.includes('password') ||
           Boolean(domEl?.input?.is_password));
 
+      const isPhoneFalsePositive =
+        /\b(?:headphone|microphone|gramophone|megaphone|saxophone|phone\s*booth|phone\s*stand|order|ord|invoice|inv|tracking|track|serial|reference)\b/i.test(
+          regText
+        ) ||
+        /\b(?:headphone|microphone|gramophone|megaphone|saxophone|phone\s*booth|phone\s*stand|order|ord|invoice|inv|tracking|track|serial|reference)\b/i.test(
+          elAccessibleName
+        );
+
       const isPhoneField =
         isInputSemantics &&
         !isAadhaarField &&
         !isPanField &&
+        !isPhoneFalsePositive &&
         (regText.includes('phone') ||
           regText.includes('mobile') ||
           regText.includes('contact') ||
@@ -375,8 +388,7 @@ export const privacyStub = {
           elId.includes('mobile') ||
           elPlaceholder.includes('phone') ||
           elPlaceholder.includes('mobile') ||
-          domEl?.input?.type === 'tel' ||
-          domEl?.input?.type === 'number');
+          domEl?.input?.type === 'tel');
 
       const isEmailField =
         isInputSemantics &&
@@ -425,36 +437,23 @@ export const privacyStub = {
       const isSurgicallyMaskable = reg.bbox[2] < 800 && reg.bbox[3] < 600;
 
       // Direct semantic classification for form inputs
-      if (isAadhaarField) {
+      const semanticCandidate = domEl ? classifyDomElement(domEl, { surroundingText: reg.text }) : null;
+
+      if (semanticCandidate && semanticCandidate.confidence >= 0.70) {
         regionHasPii = true;
-        boxLabel = 'AADHAAR';
+        boxLabel = semanticCandidate.specificSubtype || semanticCandidate.category;
         detections.push({
-          id: `pii_aadhaar_${reg.region_id}`,
-          type: 'GOV_ID',
-          source: ['DOM', 'REGEX'],
+          id: semanticCandidate.id,
+          type: semanticCandidate.category,
+          source: ['DOM', 'CONTEXT'],
           region_id: reg.region_id,
           bbox: reg.bbox,
           span: null,
-          confidence: 1.0,
-          mandatory: true,
+          confidence: semanticCandidate.confidence,
+          mandatory: semanticCandidate.isMandatory,
         });
         textReplacements++;
-        sanitizedText = '<REDACTED_AADHAAR>';
-      } else if (isPanField) {
-        regionHasPii = true;
-        boxLabel = 'PAN';
-        detections.push({
-          id: `pii_pan_${reg.region_id}`,
-          type: 'GOV_ID',
-          source: ['DOM', 'REGEX'],
-          region_id: reg.region_id,
-          bbox: reg.bbox,
-          span: null,
-          confidence: 1.0,
-          mandatory: true,
-        });
-        textReplacements++;
-        sanitizedText = '<REDACTED_PAN>';
+        sanitizedText = semanticCandidate.valueReference || `<REDACTED_${boxLabel}>`;
       } else if (isPassword) {
         regionHasPii = true;
         boxLabel = 'PASSWORD';
@@ -470,36 +469,6 @@ export const privacyStub = {
         });
         textReplacements++;
         sanitizedText = '<REDACTED_PASSWORD>';
-      } else if (isPhoneField) {
-        regionHasPii = true;
-        boxLabel = 'PHONE';
-        detections.push({
-          id: `pii_phone_${reg.region_id}`,
-          type: 'PHONE',
-          source: ['DOM', 'REGEX'],
-          region_id: reg.region_id,
-          bbox: reg.bbox,
-          span: null,
-          confidence: 1.0,
-          mandatory: true,
-        });
-        textReplacements++;
-        sanitizedText = '<PHONE>';
-      } else if (isEmailField) {
-        regionHasPii = true;
-        boxLabel = 'EMAIL';
-        detections.push({
-          id: `pii_email_${reg.region_id}`,
-          type: 'EMAIL',
-          source: ['DOM', 'REGEX'],
-          region_id: reg.region_id,
-          bbox: reg.bbox,
-          span: null,
-          confidence: 1.0,
-          mandatory: true,
-        });
-        textReplacements++;
-        sanitizedText = '<EMAIL>';
       } else if (isProfileImage) {
         regionHasPii = true;
         boxLabel = 'FACE';
@@ -515,10 +484,104 @@ export const privacyStub = {
         });
         textReplacements++;
         sanitizedText = '<REDACTED_FACE>';
+      } else if (!domEl && isAadhaarField) {
+        regionHasPii = true;
+        boxLabel = 'AADHAAR';
+        detections.push({
+          id: `pii_aadhaar_${reg.region_id}`,
+          type: 'GOV_ID',
+          source: ['DOM', 'REGEX'],
+          region_id: reg.region_id,
+          bbox: reg.bbox,
+          span: null,
+          confidence: 1.0,
+          mandatory: true,
+        });
+        textReplacements++;
+        sanitizedText = '<REDACTED_AADHAAR>';
+      } else if (!domEl && isPanField) {
+        regionHasPii = true;
+        boxLabel = 'PAN';
+        detections.push({
+          id: `pii_pan_${reg.region_id}`,
+          type: 'GOV_ID',
+          source: ['DOM', 'REGEX'],
+          region_id: reg.region_id,
+          bbox: reg.bbox,
+          span: null,
+          confidence: 1.0,
+          mandatory: true,
+        });
+        textReplacements++;
+        sanitizedText = '<REDACTED_PAN>';
+      } else if (!domEl && isPhoneField) {
+        regionHasPii = true;
+        boxLabel = 'PHONE';
+        detections.push({
+          id: `pii_phone_${reg.region_id}`,
+          type: 'PHONE',
+          source: ['DOM', 'REGEX'],
+          region_id: reg.region_id,
+          bbox: reg.bbox,
+          span: null,
+          confidence: 1.0,
+          mandatory: true,
+        });
+        textReplacements++;
+        sanitizedText = '<PHONE>';
+      } else if (!domEl && isEmailField) {
+        regionHasPii = true;
+        boxLabel = 'EMAIL';
+        detections.push({
+          id: `pii_email_${reg.region_id}`,
+          type: 'EMAIL',
+          source: ['DOM', 'REGEX'],
+          region_id: reg.region_id,
+          bbox: reg.bbox,
+          span: null,
+          confidence: 1.0,
+          mandatory: true,
+        });
+        textReplacements++;
+        sanitizedText = '<EMAIL>';
       } else if (sanitizedText) {
-        // Pattern detection for unclassified text regions (OCR, paragraphs, text nodes)
-        // 1. Aadhaar detection with Verhoeff checksum
-        const aadhaarMatches = sanitizedText.match(aadhaarRegex);
+        // Pattern detection for unclassified text regions (OCR, paragraphs, text nodes, tables)
+        const isOCR = (reg as any).sources?.includes('OCR') || reg.source?.includes('OCR');
+        const textCandidates = indianPiiRegistry.detectText(sanitizedText, {
+          surroundingText: reg.clean_text || reg.text,
+          sourceType: isOCR ? 'OCR' : 'DOM',
+        });
+
+        if (textCandidates.length > 0) {
+          for (const cand of textCandidates) {
+            regionHasPii = true;
+            boxLabel = cand.specificSubtype || cand.category;
+            detections.push({
+              id: `${cand.id}_${reg.region_id}`,
+              type: cand.category,
+              source: isOCR ? ['OCR'] : ['REGEX'],
+              region_id: reg.region_id,
+              bbox: reg.bbox,
+              span: null,
+              confidence: cand.confidence,
+              mandatory: cand.isMandatory,
+            });
+            textReplacements++;
+            const matchedEv = cand.evidence.find(
+              (e) => e.field === 'regex_structure' || e.field === 'format_rule' || e.field === 'checksum'
+            );
+            const tokenToReplace = matchedEv?.matchedValue;
+            if (tokenToReplace && sanitizedText.includes(tokenToReplace)) {
+              sanitizedText = sanitizedText.replace(tokenToReplace, cand.valueReference || `<REDACTED_${boxLabel}>`);
+            } else if (cand.valueReference) {
+              sanitizedText = cand.valueReference;
+            }
+          }
+        }
+
+        // 1. Aadhaar detection with Verhoeff checksum (legacy fallback)
+        if (!regionHasPii) {
+          const aadhaarMatches = sanitizedText.match(aadhaarRegex);
         if (aadhaarMatches) {
           for (const match of aadhaarMatches) {
             if (validateAadhaarVerhoeff(match)) {
@@ -588,10 +651,11 @@ export const privacyStub = {
           }
         }
 
-        // 4. Phone detection (strictly guarded: never on Aadhaar/PAN fields and never on 12-digit numbers)
+        // 4. Phone detection (strictly guarded: never on Aadhaar/PAN fields, never on 12-digit numbers, never on false positives)
         if (!regionHasPii) {
+          const isPhoneFalsePositive = /\b(?:order|ord|invoice|inv|tracking|track|serial|headphone|microphone|reference|ref)\b/i.test(sanitizedText);
           phoneRegex.lastIndex = 0;
-          if (phoneRegex.test(sanitizedText)) {
+          if (!isPhoneFalsePositive && phoneRegex.test(sanitizedText)) {
             regionHasPii = true;
             boxLabel = 'PHONE';
             detections.push({
@@ -607,6 +671,7 @@ export const privacyStub = {
             sanitizedText = sanitizedText.replace(phoneRegex, '<PHONE>');
             textReplacements++;
           }
+        }
         }
       }
 

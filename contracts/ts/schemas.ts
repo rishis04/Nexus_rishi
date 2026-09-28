@@ -94,6 +94,17 @@ export const DomElementInfoSchema = z.object({
   has_bg_image: z.boolean(),
   handlers_hint: z.boolean(),
   parent_dom_id: z.string().nullable(),
+  classes: z.array(z.string()).optional(),
+  attributes: z.record(z.string()).optional(),
+  element_id: z.string().nullable().optional(),
+  element_name: z.string().nullable().optional(),
+  label: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  aria_label: z.string().nullable().optional(),
+  aria_labelledby: z.string().nullable().optional(),
+  aria_describedby: z.string().nullable().optional(),
+  form_id: z.string().nullable().optional(),
+  stable_selector: z.string().nullable().optional(),
 }).strict();
 
 export const DomSnapshotSchema = z.object({

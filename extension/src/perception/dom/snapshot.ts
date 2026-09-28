@@ -6,6 +6,7 @@ import { computeElementAccessibleName } from '../accessibility/name.js';
 import { getLocalFrameOffset } from '../../content/frame-offsets.js';
 import { elementRegistry } from '../../content/registry.js';
 import { computePageStateHash } from '../../browser/state/fingerprint.js';
+import { extractEnhancedDomMetadata, EnhancedDomMetadata } from './aria-metadata.js';
 
 const CANDIDATE_SELECTOR = [
   'a[href]',
@@ -46,6 +47,7 @@ interface CachedSemanticInfo {
   classes: string[];
   piiMatches: { nodeIndex: number, start: number, end: number, text: string, type: string }[];
   attributes: Record<string, string>;
+  enhanced: EnhancedDomMetadata;
 }
 
 interface CachedElement {
@@ -325,6 +327,7 @@ export async function extractDomSnapshot(
 
       const text = extractedText.trim().replace(/\s+/g, ' ').slice(0, 300);
       const classes = Array.from(el.classList);
+      const enhanced = extractEnhancedDomMetadata(el);
 
       cached.staticInfo = {
         tag,
@@ -338,7 +341,8 @@ export async function extractDomSnapshot(
         extractedText: text,
         classes,
         piiMatches,
-        attributes: attrs
+        attributes: attrs,
+        enhanced,
       };
     }
 
@@ -409,6 +413,15 @@ export async function extractDomSnapshot(
       has_bg_image: s.has_bg_image,
       handlers_hint: s.handlers_hint,
       parent_dom_id: null,
+      element_id: s.enhanced.element_id,
+      element_name: s.enhanced.element_name,
+      label: s.enhanced.label,
+      description: s.enhanced.description,
+      aria_label: s.enhanced.aria_label,
+      aria_labelledby: s.enhanced.aria_labelledby,
+      aria_describedby: s.enhanced.aria_describedby,
+      form_id: s.enhanced.form_id,
+      stable_selector: s.enhanced.stable_selector,
     });
   }
 

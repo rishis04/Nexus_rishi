@@ -4,8 +4,11 @@ import { bus } from '@contracts/index.js';
 import type { TaskSession } from '@contracts/index.js';
 import type { PerceptionCycleRequest } from '../../extension/src/background/perception-interface.js';
 
+import { mockChromeStorage } from '../setup.js';
+
 // Setup Test Doubles for Browser Extension Environment
 const chromeMock = {
+  storage: mockChromeStorage,
   tabs: {
     query: vi.fn(),
     get: vi.fn(),
@@ -30,7 +33,30 @@ describe('PerceptionDaemon (Phase 2 Validation)', () => {
     vi.clearAllMocks();
     
     // Test double for WXT message bus
+    let domSnapshotCalls = 0;
     vi.spyOn(bus, 'send').mockImplementation(async (messageType: string) => {
+      if (messageType === 'dom/snapshot') {
+        domSnapshotCalls++;
+        // On re-verification call after screenshot capture, return verified snapshot
+        if (domSnapshotCalls > 1) {
+          return {
+            ok: true,
+            data: {
+              snapshot_id: `snap_${Date.now()}`,
+              url_origin: 'https://example.com',
+              url_path: '/login-demo.html',
+              frames: [{ frame_id: 'main', parent_frame_id: null, origin: 'https://example.com', path: '/login-demo.html', offset: [0, 0], accessible: true }],
+              elements: [{ dom_id: 'd1', tag: 'input', text: 'My PAN is ABCDE1234F', visible: true, interactable: true, bbox: [0, 0, 100, 20], input: { type: 'text' } }],
+              viewport: { w: 1024, h: 768 },
+              dpr: 1,
+              scroll: { x: 0, y: 0 },
+              page_state_hash: 'mock_state_hash',
+              ts: Date.now(),
+            }
+          };
+        }
+        return { ok: false, data: null };
+      }
       return { ok: false, error: { stage: 'network', code: 'ERR', message: 'mock' } as any };
     });
 

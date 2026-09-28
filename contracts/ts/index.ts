@@ -11,3 +11,4 @@ export * from './messages.js';
 export * from './geometry.js';
 export * from './schemas.js';
 export * from './bus.js';
+export * from './action-validator.js';

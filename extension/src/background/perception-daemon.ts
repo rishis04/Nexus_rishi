@@ -517,13 +517,53 @@ export class PerceptionDaemon implements IPerceptionPipeline {
         label = 'Password Credential';
         method = 'Capability Vault Isolation (fill_secret ref token)';
         redactedAs = '<VAULT_PASSWORD>';
+      } else if (d.id.includes('voter') || d.id.includes('voter_id')) {
+        label = 'Voter ID / EPIC Number';
+        method = 'Election Commission EPIC Structural Validation';
+        redactedAs = '<REDACTED_VOTER_ID>';
+      } else if (d.id.includes('passport')) {
+        label = 'Indian Passport';
+        method = 'Passport Format Structural & Context Validation';
+        redactedAs = '<REDACTED_PASSPORT>';
+      } else if (d.id.includes('driving_licence')) {
+        label = 'Indian Driving Licence';
+        method = 'Sarathi DL State Code & Year Validation';
+        redactedAs = '<REDACTED_DRIVING_LICENCE>';
+      } else if (d.id.includes('bank_account') || (d.type as string) === 'BANK_ACCOUNT') {
+        label = 'Bank Account Number';
+        method = 'Bank Account Context & Length Validation';
+        redactedAs = '<REDACTED_BANK_ACCOUNT>';
+      } else if (d.id.includes('ifsc')) {
+        label = 'Bank Branch IFSC Code';
+        method = 'RBI IFSC Structural Validation (5th Char Zero)';
+        redactedAs = '<REDACTED_IFSC>';
+      } else if (d.id.includes('upi')) {
+        label = 'UPI ID / VPA Handle';
+        method = 'NPCI PSP Provider & VPA Validation';
+        redactedAs = '<REDACTED_UPI>';
+      } else if (d.id.includes('card') || d.type === 'CARD') {
+        label = 'Payment Card Number';
+        method = 'Luhn Modulus-10 Checksum Algorithm';
+        redactedAs = '<REDACTED_CARD>';
+      } else if (d.id.includes('address') || d.id.includes('pincode') || d.type === 'ADDRESS') {
+        label = 'Postal Address / PIN Code';
+        method = 'Postal PIN Code & Context Validation';
+        redactedAs = '<REDACTED_ADDRESS>';
+      } else if (d.id.includes('dob') || d.type === 'DOB') {
+        label = 'Date of Birth';
+        method = 'Birth Date Semantic & Pattern Validation';
+        redactedAs = '<REDACTED_DOB>';
+      } else if (d.id.includes('person') || d.type === 'PERSON') {
+        label = 'Person Full Name';
+        method = 'Explicit Identity Context Validation';
+        redactedAs = '<REDACTED_NAME>';
       } else if (d.type === 'EMAIL') {
         label = 'Work Email Address';
         method = 'RFC-5322 Regex Pattern';
         redactedAs = '<EMAIL>';
       } else if (d.type === 'PHONE') {
         label = 'Mobile / Phone Number';
-        method = 'E.164 Telephony Engine';
+        method = 'Indian Mobile & E.164 Telephony Engine';
         redactedAs = '<PHONE>';
       } else if (d.type === 'FACE') {
         label = 'Biometric Face Avatar';

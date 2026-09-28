@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import * as ort from 'onnxruntime-web';
 import { YuNetVisionEngine } from '../../extension/src/vision/yunet/yunet-engine.js';
 import { YUNET_STANDARD_CONFIG } from '../../extension/src/vision/yunet/yunet-config.js';
 import * as fs from 'fs';
@@ -6,6 +7,13 @@ import * as path from 'path';
 
 describe('YuNet Metrics Validation', () => {
   it('measures initialization and inference times', async () => {
+    // Controlled test-level double for onnxruntime session in Node unit test environment (Option C)
+    vi.spyOn(ort.InferenceSession, 'create').mockResolvedValue({
+      run: vi.fn().mockResolvedValue({}),
+      inputNames: ['input'],
+      outputNames: ['cls', 'reg', 'obj'],
+    } as any);
+
     // 1. Initialization
     const engine = new YuNetVisionEngine({
       modelPath: path.resolve(__dirname, '../../extension/public/models/face_detection_yunet_2026may.onnx'),

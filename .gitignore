@@ -16,3 +16,8 @@ test-results/
 # System files
 .DS_Store
 Thumbs.db
+
+# Zip archives
+zip_folder/
+
+

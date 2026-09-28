@@ -54,6 +54,16 @@ export interface DomElementInfo {
   has_bg_image: boolean;
   handlers_hint: boolean;
   parent_dom_id: string | null;
+  // Phase 1: DOM / ARIA Perception Contract Extensions
+  element_id?: string | null;
+  element_name?: string | null;
+  label?: string | null;
+  description?: string | null;
+  aria_label?: string | null;
+  aria_labelledby?: string | null;
+  aria_describedby?: string | null;
+  form_id?: string | null;
+  stable_selector?: string | null;
 }
 
 export interface DomSnapshot {

@@ -98,7 +98,7 @@ async function runPrivacyLoop(session: TaskSession, abortController: AbortContro
       }
       
       broadcastUiState({
-        state: 'DONE',
+        state: 'PERCEIVING',
         privacy_audit: {
           attestation_digest: res.sanRes.attested?.sha256 || null,
           egress_body_preview: null,
@@ -125,7 +125,7 @@ async function runPrivacyLoop(session: TaskSession, abortController: AbortContro
     } catch (err: any) {
       console.error('[PrivacyController] Loop error:', err);
       broadcastUiState({
-        state: 'FAILED',
+        state: 'PERCEIVING',
         last_error: stageError('INTERNAL', 'dom', err.message || String(err)),
       });
       await interruptibleSleep(ERROR_INTERVAL_MS, abortController.signal);
