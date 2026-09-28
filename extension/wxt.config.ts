@@ -5,6 +5,13 @@ import path from 'node:path';
 export default defineConfig({
   vite: () =>
     ({
+      server: {
+        port: 3333,
+        strictPort: true,
+        hmr: {
+          port: 3333,
+        }
+      },
       plugins: [react()],
       resolve: {
         alias: {
