@@ -19,5 +19,5 @@ Thumbs.db
 
 # Zip archives
 zip_folder/
-
-
+zip_foler
+*.zip
