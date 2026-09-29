@@ -44,6 +44,10 @@ export default defineBackground(() => {
     return { acknowledged: true };
   });
 
+  bus.on('offscreen/ready', async () => {
+    return { acknowledged: true };
+  });
+
   bus.on('ui/get-state', async () => {
     return getUiState();
   });

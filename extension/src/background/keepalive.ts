@@ -6,7 +6,8 @@ export function startKeepalive(): void {
   heartbeatInterval = setInterval(() => {
     if (typeof chrome !== 'undefined' && chrome.runtime?.getPlatformInfo) {
       chrome.runtime.getPlatformInfo(() => {
-        // No-op API call keeps service worker awake
+        // Access lastError to ensure no unchecked runtime errors during teardown
+        const _ = chrome.runtime?.lastError;
       });
     }
   }, 20000);

@@ -135,7 +135,15 @@ export const App: React.FC = () => {
   };
 
   const handleRecordFixture = async () => {
-    const snap = await bus.send('dom/snapshot', {});
+    let targetTabId: number | undefined = undefined;
+    if (typeof chrome !== 'undefined' && chrome.tabs?.query) {
+      try {
+        const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        if (activeTab?.id) targetTabId = activeTab.id;
+      } catch {}
+    }
+
+    const snap = await bus.send('dom/snapshot', {}, targetTabId ? { tabId: targetTabId } : undefined);
     if (snap.ok) {
       const dataStr =
         'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(snap.data, null, 2));

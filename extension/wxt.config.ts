@@ -3,15 +3,13 @@ import react from '@vitejs/plugin-react';
 import path from 'node:path';
 
 export default defineConfig({
+  dev: {
+    server: {
+      port: 3000,
+    },
+  },
   vite: () =>
     ({
-      server: {
-        port: 3333,
-        strictPort: true,
-        hmr: {
-          port: 3333,
-        }
-      },
       plugins: [react()],
       resolve: {
         alias: {

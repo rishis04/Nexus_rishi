@@ -35,14 +35,22 @@ function ensureGlobalMessageListener(ext: typeof chrome) {
         Promise.resolve()
           .then(() => handlers[0]!(message.payload, sender))
           .then((data) => {
-            sendResponse({ ok: true, data });
+            try {
+              sendResponse({ ok: true, data });
+            } catch {
+              // Message channel may have closed before response was sent
+            }
           })
           .catch((err) => {
             const error =
               err?.code && err?.stage
                 ? err
                 : stageError('INTERNAL', 'dom', err?.message || String(err));
-            sendResponse({ ok: false, error });
+            try {
+              sendResponse({ ok: false, error });
+            } catch {
+              // Message channel may have closed before response was sent
+            }
           });
         return true; // Keep message channel open for asynchronous sendResponse
       }
@@ -66,7 +74,7 @@ export const bus = {
   ): Promise<BusResponse<MessageMap[T]['response']>> {
     const message = { type, payload };
     const ext = getChrome();
-    const timeoutMs = options?.timeoutMs || (type === 'vision/perceive' ? 10000 : 4500);
+    const timeoutMs = options?.timeoutMs || (type === 'vision/perceive' ? 10000 : 5000);
 
     // 1. Chrome extension environment
     if (ext && ext.runtime?.sendMessage) {
@@ -84,17 +92,21 @@ export const bus = {
 
         try {
           const callback = (res: BusResponse<MessageMap[T]['response']> | undefined) => {
+            // ALWAYS access ext.runtime.lastError first so Chrome knows it was inspected.
+            // This prevents "Unchecked runtime.lastError: A listener indicated an asynchronous response..."
+            const lastError = ext.runtime.lastError;
+
             if (settled) return;
             settled = true;
             clearTimeout(timer);
 
-            if (ext.runtime.lastError) {
+            if (lastError) {
               resolve({
                 ok: false,
                 error: stageError(
                   'INTERNAL',
                   'dom',
-                  ext.runtime.lastError.message || 'Unknown runtime error'
+                  lastError.message || 'Unknown runtime error'
                 ),
               });
               return;
@@ -110,11 +122,10 @@ export const bus = {
           };
 
           if (options?.tabId && options.tabId > 0 && ext.tabs?.sendMessage) {
-            if (options.frameId !== undefined) {
-              ext.tabs.sendMessage(options.tabId, message, { frameId: options.frameId }, callback);
-            } else {
-              ext.tabs.sendMessage(options.tabId, message, callback);
-            }
+            // Default to top frame (frameId: 0) when frameId is omitted to prevent broadcasting to all
+            // subframes/iframes which causes "message channel closed before a response was received".
+            const frameId = options.frameId !== undefined ? options.frameId : 0;
+            ext.tabs.sendMessage(options.tabId, message, { frameId }, callback);
           } else {
             ext.runtime.sendMessage(message, callback);
           }

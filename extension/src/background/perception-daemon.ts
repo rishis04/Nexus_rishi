@@ -152,11 +152,11 @@ export class PerceptionDaemon implements IPerceptionPipeline {
       return null;
     }
 
-    let domResp = await bus.send('dom/snapshot', {}, { tabId: session.tab_id, timeoutMs: 1500 }).catch(() => ({ ok: false, data: null }));
+    let domResp = await bus.send('dom/snapshot', {}, { tabId: session.tab_id, timeoutMs: 3000 }).catch(() => ({ ok: false, data: null }));
 
     if (!domResp || !domResp.ok) {
       console.log('[PerceptionDaemon] dom/snapshot failed or timed out, retrying once...');
-      domResp = await bus.send('dom/snapshot', {}, { tabId: session.tab_id, timeoutMs: 1500 }).catch(() => ({ ok: false, data: null }));
+      domResp = await bus.send('dom/snapshot', {}, { tabId: session.tab_id, timeoutMs: 3000 }).catch(() => ({ ok: false, data: null }));
     }
 
     let domSnapshot: DomSnapshot | null = null;
@@ -175,9 +175,9 @@ export class PerceptionDaemon implements IPerceptionPipeline {
             new Promise((_, reject) => setTimeout(() => reject(new Error('Script injection timed out')), 2000)),
           ]);
           await new Promise((r) => setTimeout(r, 350));
-          domResp = await bus.send('dom/snapshot', {}, { tabId: session.tab_id, timeoutMs: 1500 }).catch(() => ({ ok: false, data: null }));
+          domResp = await bus.send('dom/snapshot', {}, { tabId: session.tab_id, timeoutMs: 3000 }).catch(() => ({ ok: false, data: null }));
           if (!domResp || !domResp.ok) {
-            domResp = await bus.send('dom/snapshot', {}, { tabId: session.tab_id, timeoutMs: 1500 }).catch(() => ({ ok: false, data: null }));
+            domResp = await bus.send('dom/snapshot', {}, { tabId: session.tab_id, timeoutMs: 3000 }).catch(() => ({ ok: false, data: null }));
           }
           if (domResp && domResp.ok && domResp.data) {
             domSnapshot = domResp.data;
@@ -378,7 +378,7 @@ export class PerceptionDaemon implements IPerceptionPipeline {
         await capSpan.end({ dpr: meta.dpr });
 
         // Re-fetch DOM immediately after screenshot to minimize scroll lag mismatch
-        const freshDomResp = await bus.send('dom/snapshot', {}, { tabId: session.tab_id, timeoutMs: 1000 }).catch(() => ({ ok: false, data: null }));
+        const freshDomResp = await bus.send('dom/snapshot', {}, { tabId: session.tab_id, timeoutMs: 3000 }).catch(() => ({ ok: false, data: null }));
         
         if (!freshDomResp || !freshDomResp.ok || !freshDomResp.data) {
           // If DOM fetch fails, we are likely navigating. Abort the cycle.
