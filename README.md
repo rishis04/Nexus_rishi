@@ -1,7 +1,6 @@
 # Nexus 🛡️🌐
 
-> **On-Device Visual Perception, Privacy-Preserving Redaction & Controlled Execution for Lightweight Browser Agents**  
-> *Developed for Smart India Hackathon (SIH) — Problem Statement 26171 (ISRO)*
+> **On-Device Visual Perception, Privacy-Preserving Redaction & Controlled Execution for Lightweight Browser Agents**
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg?logo=typescript)](https://www.typescriptlang.org/)
 [![Chrome Extension](https://img.shields.io/badge/Manifest_V3-WXT_Framework-orange.svg?logo=googlechrome)](https://developer.chrome.com/docs/extensions/mv3/)
@@ -227,7 +226,7 @@ pnpm e2e
 
 ---
 
-## 📄 License & Attribution
+## 📄 License
 
-Developed for the **Smart India Hackathon (SIH)** under Problem Statement **26171** (ISRO).  
 Distributed under the MIT License. See [LICENSE](LICENSE) for details.
+
