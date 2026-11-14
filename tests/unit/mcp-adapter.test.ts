@@ -110,13 +110,13 @@ describe('Phase 5: Local MCP Adapter Tests', () => {
   it('1. returns sanitized observation via get_observation tool', async () => {
     const res = await mcp.callTool('get_observation', {});
     expect(res.isError).toBeFalsy();
-    expect(res.content[0].type).toBe('text');
+    expect(res.content[0]!.type).toBe('text');
 
-    const parsed = JSON.parse(res.content[0].text);
+    const parsed = JSON.parse(res.content[0]!.text);
     expect(parsed.observation_id).toBe('obs_mcp_live_100');
     expect(parsed.page_state_hash).toBe('hash_live_page_55');
     expect(parsed.targets).toHaveLength(3);
-    expect(parsed.targets[0].target_id).toBe('btn-launch');
+    expect(parsed.targets[0]!.target_id).toBe('btn-launch');
   });
 
   // 2. Valid click
@@ -127,10 +127,10 @@ describe('Phase 5: Local MCP Adapter Tests', () => {
     });
 
     expect(res.isError).toBeFalsy();
-    expect(res.content[0].text).toContain('executed successfully');
+    expect(res.content[0]!.text).toContain('executed successfully');
     expect(mockExecutor).toHaveBeenCalledTimes(1);
 
-    const callArg: StructuredAction = mockExecutor.mock.calls[0][0];
+    const callArg: StructuredAction = mockExecutor.mock.calls[0]![0];
     expect(callArg.action).toBe('click');
     expect(callArg.target?.region_id).toBe('btn-launch');
   });
@@ -146,7 +146,7 @@ describe('Phase 5: Local MCP Adapter Tests', () => {
     expect(res.isError).toBeFalsy();
     expect(mockExecutor).toHaveBeenCalledTimes(1);
 
-    const callArg: StructuredAction = mockExecutor.mock.calls[0][0];
+    const callArg: StructuredAction = mockExecutor.mock.calls[0]![0];
     expect(callArg.action).toBe('type');
     expect(callArg.target?.region_id).toBe('input-coordinates');
     expect(callArg.params?.text).toBe('LAT 13.0827 LONG 80.2707');
@@ -163,7 +163,7 @@ describe('Phase 5: Local MCP Adapter Tests', () => {
     expect(res.isError).toBeFalsy();
     expect(mockExecutor).toHaveBeenCalledTimes(1);
 
-    const callArg: StructuredAction = mockExecutor.mock.calls[0][0];
+    const callArg: StructuredAction = mockExecutor.mock.calls[0]![0];
     expect(callArg.action).toBe('scroll');
     expect(callArg.params?.direction).toBe('down');
     expect(callArg.params?.amount).toBe(450);
@@ -179,7 +179,7 @@ describe('Phase 5: Local MCP Adapter Tests', () => {
     expect(res.isError).toBeFalsy();
     expect(mockExecutor).toHaveBeenCalledTimes(1);
 
-    const callArg: StructuredAction = mockExecutor.mock.calls[0][0];
+    const callArg: StructuredAction = mockExecutor.mock.calls[0]![0];
     expect(callArg.action).toBe('keypress');
     expect(callArg.params?.key).toBe('Enter');
   });
@@ -193,7 +193,7 @@ describe('Phase 5: Local MCP Adapter Tests', () => {
     });
 
     expect(res.isError).toBe(true);
-    expect(res.content[0].text).toContain('Malformed click arguments');
+    expect(res.content[0]!.text).toContain('Malformed click arguments');
     expect(mockExecutor).not.toHaveBeenCalled();
   });
 
@@ -204,7 +204,7 @@ describe('Phase 5: Local MCP Adapter Tests', () => {
     });
 
     expect(res.isError).toBe(true);
-    expect(res.content[0].text).toContain('not recognized or not approved');
+    expect(res.content[0]!.text).toContain('not recognized or not approved');
     expect(mockExecutor).not.toHaveBeenCalled();
   });
 
@@ -216,7 +216,7 @@ describe('Phase 5: Local MCP Adapter Tests', () => {
     });
 
     expect(res.isError).toBe(true);
-    expect(res.content[0].text).toContain('TARGET_NOT_FOUND');
+    expect(res.content[0]!.text).toContain('TARGET_NOT_FOUND');
     expect(mockExecutor).not.toHaveBeenCalled();
   });
 
@@ -228,7 +228,7 @@ describe('Phase 5: Local MCP Adapter Tests', () => {
     });
 
     expect(res.isError).toBe(true);
-    expect(res.content[0].text).toContain('STALE_OBSERVATION');
+    expect(res.content[0]!.text).toContain('STALE_OBSERVATION');
     expect(mockExecutor).not.toHaveBeenCalled();
   });
 
@@ -241,7 +241,7 @@ describe('Phase 5: Local MCP Adapter Tests', () => {
     });
 
     expect(res.isError).toBe(true);
-    expect(res.content[0].text).toContain('POLICY_DENIED');
+    expect(res.content[0]!.text).toContain('POLICY_DENIED');
     expect(mockExecutor).not.toHaveBeenCalled();
   });
 
@@ -304,7 +304,7 @@ describe('Phase 5: Local MCP Adapter Tests', () => {
   // 15. MCP cannot access raw screenshot
   it('15. verifies MCP observation response contains zero screenshot or pixel data', async () => {
     const res = await mcp.callTool('get_observation', {});
-    const text = res.content[0].text;
+    const text = res.content[0]!.text;
 
     expect(text).not.toContain('screenshot');
     expect(text).not.toContain('base64');
@@ -344,7 +344,7 @@ describe('Phase 5: Local MCP Adapter Tests', () => {
     });
 
     expect(res.isError).toBe(true);
-    expect(res.content[0].text).toContain('POLICY_DENIED');
+    expect(res.content[0]!.text).toContain('POLICY_DENIED');
     expect(mockExecutor).not.toHaveBeenCalled();
   });
 

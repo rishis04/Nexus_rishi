@@ -21,3 +21,7 @@ Thumbs.db
 zip_folder/
 zip_foler
 *.zip
+
+# Embedded repos / external references
+BrowserOS/
+

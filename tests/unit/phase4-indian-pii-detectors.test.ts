@@ -42,7 +42,7 @@ import {
 } from '../../extension/src/privacy/semantic-pii-classifier.js';
 import { privacyStub } from '../../extension/src/privacy.stub.js';
 
-function makeElement(overrides: Partial<DomElementInfo> = {}): DomElementInfo {
+function makeElement(overrides: any = {}): DomElementInfo {
   return {
     dom_id: overrides.dom_id || 'el_test_1',
     element_id: overrides.element_id || null,
@@ -94,7 +94,7 @@ function makeElement(overrides: Partial<DomElementInfo> = {}): DomElementInfo {
     },
     table: overrides.table || null,
     window: overrides.window || null,
-  };
+  } as any as DomElementInfo;
 }
 
 describe('Phase 4: Indian PII Detector Registry Tests', () => {
@@ -932,13 +932,12 @@ describe('Phase 4: Indian PII Detector Registry Tests', () => {
             clean_text: 'ABCPE1234F',
             interactable: true,
           },
-        ],
+        ] as any,
         dom: mockSnapshot,
         faces: [],
-        ocr_regions: [],
-        viewport: { w: 1280, h: 800 },
-        dpr: 1,
-        timestamp: Date.now(),
+        ocr_tokens: [],
+        capture: null,
+        ts: Date.now(),
       },
       mode: 'normal',
       include_image: false,
@@ -1025,13 +1024,12 @@ describe('Phase 4: Indian PII Detector Registry Tests', () => {
             clean_text: rawPan,
             interactable: true,
           },
-        ],
+        ] as any,
         dom: mockSnapshot,
         faces: [],
-        ocr_regions: [],
-        viewport: { w: 1280, h: 800 },
-        dpr: 1,
-        timestamp: Date.now(),
+        ocr_tokens: [],
+        capture: null,
+        ts: Date.now(),
       },
       mode: 'normal',
       include_image: false,

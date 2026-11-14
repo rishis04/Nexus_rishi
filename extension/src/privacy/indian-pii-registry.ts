@@ -1,4 +1,4 @@
-import type { DomElementInfo } from '../../contracts/ts/dom.js';
+import type { DomElementInfo } from '@contracts/dom.js';
 import type {
   DetectorContext,
   DetectorValidationResult,

@@ -100,7 +100,7 @@ export class PerceptionDaemon implements IPerceptionPipeline {
         if (session.tab_id && session.tab_id > 0 && chrome.tabs?.get) {
           const currentTab = await chrome.tabs.get(session.tab_id);
           if (
-            !currentTab.url ||
+            !currentTab?.url ||
             currentTab.url.startsWith('chrome://') ||
             currentTab.url.startsWith('chrome-extension://') ||
             currentTab.url.startsWith('chrome-error://') ||

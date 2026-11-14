@@ -171,7 +171,7 @@ export const App: React.FC = () => {
       >
         <div>
           <h1 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg)' }}>
-            SIH26171 Agent
+            nexus
           </h1>
           <p style={{ fontSize: '11px', color: 'var(--muted)' }}>
             On-device Perception & Action Security

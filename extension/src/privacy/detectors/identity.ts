@@ -166,6 +166,15 @@ export const aadhaarDetector: PiiDetector = {
 
     // Context-only element detection (form input with placeholder/label for Aadhaar)
     if (hasAadhaarContext && context?.element?.input) {
+      const inputVal = (context.element.input.value || '').trim();
+      // If the input value or text contains a PAN number, Aadhaar detector must NOT claim it
+      if (inputVal && /\b[A-Za-z]{5}\d{4}[A-Za-z]\b/.test(inputVal)) {
+        return null;
+      }
+      if (/\b[A-Za-z]{5}\d{4}[A-Za-z]\b/.test(text)) {
+        return null;
+      }
+
       return {
         isValid: true,
         category: 'GOV_ID',
@@ -203,6 +212,8 @@ export const panDetector: PiiDetector = {
     if (sem.includes('pan card') || sem.includes('pan number') || sem.includes('permanent account number') || /\bpan\b/.test(sem)) {
       return true;
     }
+    const val = (context?.element?.input?.value || '').trim();
+    if (/\b[A-Za-z]{5}\d{4}[A-Za-z]\b/.test(val)) return true;
     return /\b[A-Za-z]{5}\d{4}[A-Za-z]\b/.test(text);
   },
 
@@ -221,7 +232,9 @@ export const panDetector: PiiDetector = {
       sem.includes('permanent account number') ||
       /\bpan\b/.test(sem);
 
-    const panMatches = text.match(/\b[A-Za-z]{5}\d{4}[A-Za-z]\b/g);
+    const inputVal = (context?.element?.input?.value || '').trim();
+    const textToScan = inputVal ? `${text} ${inputVal}` : text;
+    const panMatches = textToScan.match(/\b[A-Za-z]{5}\d{4}[A-Za-z]\b/g);
     if (panMatches) {
       for (const match of panMatches) {
         if (validateIndianPAN(match)) {
@@ -247,7 +260,7 @@ export const panDetector: PiiDetector = {
             category: 'GOV_ID',
             specificSubtype: 'PAN',
             normalizedValue: match.toUpperCase(),
-            confidence: hasPanContext ? 1.0 : 0.88,
+            confidence: 1.0,
             reason: `Valid Indian PAN structure with entity type [${match.toUpperCase()[3]}]${hasPanContext ? ' and semantic context' : ''}`,
             evidence,
             valueReference: '<REDACTED_PAN>',

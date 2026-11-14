@@ -1,6 +1,10 @@
-import type { BBox } from '../../contracts/ts/common.js';
-import type { DomElementInfo } from '../../contracts/ts/dom.js';
-import type { PiiType } from '../../contracts/ts/privacy.js';
+import type { BBox } from '@contracts/common.js';
+import type { DomElementInfo } from '@contracts/dom.js';
+import type { PiiType } from '@contracts/privacy.js';
+import type { PiiSignalEvidence } from './detectors/types.js';
+import { validateIndianPAN } from './detectors/identity.js';
+
+export type { PiiSignalEvidence };
 
 /**
  * Phase 3: Semantic PII Classification Layer
@@ -13,23 +17,6 @@ import type { PiiType } from '../../contracts/ts/privacy.js';
  * DOM + ARIA -> Semantic Representation -> PII Classification -> PII Candidate -> Existing Redaction Boundary
  */
 
-export interface PiiSignalEvidence {
-  field:
-    | 'role'
-    | 'name'
-    | 'description'
-    | 'label'
-    | 'placeholder'
-    | 'type'
-    | 'autocomplete'
-    | 'id'
-    | 'element_name'
-    | 'value'
-    | 'surrounding_text';
-  matchedValue: string;
-  matchedRule: string;
-  signalStrength: 'high' | 'medium' | 'low';
-}
 
 export interface PiiCandidate {
   id: string; // Unique deterministic candidate ID, e.g. `pii_email_d1`
@@ -282,7 +269,7 @@ export function classifyDomElement(
 
     // PAN check (with false-positive protection)
     let isPan = false;
-    if (!isAadhaar && !isFalsePositive(combinedSearchText, 'PAN')) {
+    if (!isFalsePositive(combinedSearchText, 'PAN')) {
       const panStrictRegex = /\b(?:pan\s*card|pan\s*number|permanent\s*account\s*number)\b/i;
       const panWordRegex = /\bpan\b/i;
 
@@ -305,6 +292,26 @@ export function classifyDomElement(
           }
         }
       }
+    }
+
+    // Direct PAN value inspection: if element contains a PAN number, it is strictly PAN
+    const elementValue = (el.input?.value || el.text || '').trim();
+    if (elementValue && /\b[A-Za-z]{5}\d{4}[A-Za-z]\b/.test(elementValue)) {
+      const panValMatches = elementValue.match(/\b[A-Za-z]{5}\d{4}[A-Za-z]\b/g);
+      if (panValMatches && panValMatches.some((m) => validateIndianPAN(m))) {
+        evidence.push({
+          field: 'value',
+          matchedValue: 'PAN_NUMBER',
+          matchedRule: 'pan_value_match',
+          signalStrength: 'high',
+        });
+        isPan = true;
+      }
+    }
+
+    // If PAN is confirmed, cancel any false Aadhaar keyword/placeholder assumption
+    if (isPan) {
+      isAadhaar = false;
     }
 
     // Other national IDs (SSN, Passport, Voter ID)

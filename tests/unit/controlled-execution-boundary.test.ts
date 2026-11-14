@@ -90,7 +90,7 @@ describe('Phase 4: Controlled Execution Boundary Tests', () => {
     expect(res.executed).toBe(true);
     expect(mockExecutor).toHaveBeenCalledTimes(1);
 
-    const executedAction: StructuredAction = mockExecutor.mock.calls[0][0];
+    const executedAction: StructuredAction = mockExecutor.mock.calls[0]![0];
     expect(executedAction.action).toBe('click');
     expect(executedAction.target?.region_id).toBe('btn-checkout');
     expect(executedAction.request_id).toBe('req_click_01');
@@ -114,7 +114,7 @@ describe('Phase 4: Controlled Execution Boundary Tests', () => {
     expect(res.executed).toBe(true);
     expect(mockExecutor).toHaveBeenCalledTimes(1);
 
-    const executedAction: StructuredAction = mockExecutor.mock.calls[0][0];
+    const executedAction: StructuredAction = mockExecutor.mock.calls[0]![0];
     expect(executedAction.action).toBe('type');
     expect(executedAction.target?.region_id).toBe('input-search');
     expect(executedAction.params?.text).toBe('Chandrayaan telemetry data');
@@ -138,7 +138,7 @@ describe('Phase 4: Controlled Execution Boundary Tests', () => {
     expect(res.executed).toBe(true);
     expect(mockExecutor).toHaveBeenCalledTimes(1);
 
-    const executedAction: StructuredAction = mockExecutor.mock.calls[0][0];
+    const executedAction: StructuredAction = mockExecutor.mock.calls[0]![0];
     expect(executedAction.action).toBe('scroll');
     expect(executedAction.params?.direction).toBe('down');
     expect(executedAction.params?.amount).toBe(500);
@@ -278,7 +278,7 @@ describe('Phase 4: Controlled Execution Boundary Tests', () => {
     expect(res.executed).toBe(true);
     expect(mockExecutor).toHaveBeenCalledTimes(1);
 
-    const [actionArg, secretArg] = mockExecutor.mock.calls[0];
+    const [actionArg, secretArg] = mockExecutor.mock.calls[0]!;
     expect(actionArg.action).toBe('fill_secret');
     expect(actionArg.target.region_id).toBe('input-card-secret');
     expect(actionArg.capability).toBe('cap_vault_01');

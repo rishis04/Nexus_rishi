@@ -169,10 +169,10 @@ export async function redactImageCanvas(
 
       let labelText = '';
       const norm = (box.label || '').toUpperCase();
-      if (norm.includes('AADHAAR')) {
-        labelText = '[REDACTED: AADHAAR]';
-      } else if (norm.includes('PAN')) {
+      if (norm.includes('PAN')) {
         labelText = '[REDACTED: PAN]';
+      } else if (norm.includes('AADHAAR')) {
+        labelText = '[REDACTED: AADHAAR]';
       } else if (norm.includes('EMAIL')) {
         labelText = '[REDACTED: EMAIL]';
       } else if (norm.includes('PASSWORD')) {
@@ -314,7 +314,7 @@ export const privacyStub = {
     const phoneRegex = /(?<!\d)(?:(?:\+91|0)[\s-]?)?[6-9](?:[\s-]?\d){9}(?!\d)/g;
 
     const sanitizedRegions: SanitizedRegion[] = req.frame.regions.map((reg) => {
-      let sanitizedText = reg.text || reg.visual_text || reg.clean_text || '';
+      let sanitizedText = reg.text || (reg as any).visual_text || (reg as any).clean_text || '';
       let regionHasPii = false;
       let boxLabel = 'PII';
 
@@ -328,12 +328,27 @@ export const privacyStub = {
       const elInputName = (domEl?.input?.name || '').toLowerCase();
       const elPlaceholder = (domEl?.input?.placeholder || '').toLowerCase();
       const elId = ((domEl as any)?.id || '').toLowerCase();
-      const regText = (reg.text || reg.visual_text || reg.clean_text || '').toLowerCase();
+      const regText = (reg.text || (reg as any).visual_text || (reg as any).clean_text || '').toLowerCase();
 
       const isInputSemantics = reg.semantic_type === 'input' || domEl?.tag === 'input' || domEl?.tag === 'textarea' || domEl?.role === 'textbox' || domEl?.tag === 'select' || domEl?.tag === 'label' || domEl?.role === 'radio' || domEl?.role === 'checkbox';
 
+      const rawCombinedVal = `${domEl?.input?.value || ''} ${reg.text || ''} ${(reg as any).visual_text || ''} ${(reg as any).clean_text || ''}`;
+      const panMatchesInReg = rawCombinedVal.match(panRegex);
+      const hasPanValue = Boolean(panMatchesInReg && panMatchesInReg.some((m) => validateIndianPAN(m)));
+
+      const isPanField =
+        isInputSemantics &&
+        (hasPanValue ||
+          regText.includes('pan') ||
+          elAccessibleName.includes('pan') ||
+          elInputName.includes('pan') ||
+          elId.includes('pan') ||
+          elPlaceholder.includes('pan'));
+
       const isAadhaarField =
         isInputSemantics &&
+        !hasPanValue &&
+        !isPanField &&
         (regText.includes('aadhaar') ||
           regText.includes('aadhar') ||
           elAccessibleName.includes('aadhaar') ||
@@ -344,15 +359,6 @@ export const privacyStub = {
           elPlaceholder.includes('xxxx') ||
           elId.includes('aadhaar') ||
           elId.includes('aadhar'));
-
-      const isPanField =
-        isInputSemantics &&
-        !isAadhaarField &&
-        (regText.includes('pan') ||
-          elAccessibleName.includes('pan') ||
-          elInputName.includes('pan') ||
-          elId.includes('pan') ||
-          elPlaceholder.includes('pan'));
 
       const isPassword =
         isInputSemantics &&
@@ -437,13 +443,17 @@ export const privacyStub = {
       const isSurgicallyMaskable = reg.bbox[2] < 800 && reg.bbox[3] < 600;
 
       // Direct semantic classification for form inputs
-      const semanticCandidate = domEl ? classifyDomElement(domEl, { surroundingText: reg.text }) : null;
+      const semanticCandidate = domEl ? classifyDomElement(domEl, { surroundingText: reg.text || undefined }) : null;
 
       if (semanticCandidate && semanticCandidate.confidence >= 0.70) {
+        let effSubtype = semanticCandidate.specificSubtype || semanticCandidate.category;
+        if (hasPanValue || (isPanField && effSubtype === 'AADHAAR')) {
+          effSubtype = 'PAN';
+        }
         regionHasPii = true;
-        boxLabel = semanticCandidate.specificSubtype || semanticCandidate.category;
+        boxLabel = effSubtype;
         detections.push({
-          id: semanticCandidate.id,
+          id: effSubtype === 'PAN' && semanticCandidate.id.includes('aadhaar') ? `pii_pan_${reg.region_id}` : semanticCandidate.id,
           type: semanticCandidate.category,
           source: ['DOM', 'CONTEXT'],
           region_id: reg.region_id,
@@ -453,7 +463,7 @@ export const privacyStub = {
           mandatory: semanticCandidate.isMandatory,
         });
         textReplacements++;
-        sanitizedText = semanticCandidate.valueReference || `<REDACTED_${boxLabel}>`;
+        sanitizedText = effSubtype === 'PAN' ? '<REDACTED_PAN>' : (semanticCandidate.valueReference || `<REDACTED_${boxLabel}>`);
       } else if (isPassword) {
         regionHasPii = true;
         boxLabel = 'PASSWORD';
@@ -484,6 +494,22 @@ export const privacyStub = {
         });
         textReplacements++;
         sanitizedText = '<REDACTED_FACE>';
+      } else if (hasPanValue || (!domEl && isPanField)) {
+        regionHasPii = true;
+        boxLabel = 'PAN';
+        const isOCR = (reg as any).sources?.includes('OCR') || reg.source?.includes('OCR');
+        detections.push({
+          id: `pii_pan_${reg.region_id}`,
+          type: 'GOV_ID',
+          source: isOCR ? ['OCR'] : domEl ? ['DOM', 'REGEX'] : ['DOM', 'REGEX'],
+          region_id: reg.region_id,
+          bbox: reg.bbox,
+          span: null,
+          confidence: 1.0,
+          mandatory: true,
+        });
+        textReplacements++;
+        sanitizedText = '<REDACTED_PAN>';
       } else if (!domEl && isAadhaarField) {
         regionHasPii = true;
         boxLabel = 'AADHAAR';
@@ -499,21 +525,6 @@ export const privacyStub = {
         });
         textReplacements++;
         sanitizedText = '<REDACTED_AADHAAR>';
-      } else if (!domEl && isPanField) {
-        regionHasPii = true;
-        boxLabel = 'PAN';
-        detections.push({
-          id: `pii_pan_${reg.region_id}`,
-          type: 'GOV_ID',
-          source: ['DOM', 'REGEX'],
-          region_id: reg.region_id,
-          bbox: reg.bbox,
-          span: null,
-          confidence: 1.0,
-          mandatory: true,
-        });
-        textReplacements++;
-        sanitizedText = '<REDACTED_PAN>';
       } else if (!domEl && isPhoneField) {
         regionHasPii = true;
         boxLabel = 'PHONE';
@@ -548,7 +559,7 @@ export const privacyStub = {
         // Pattern detection for unclassified text regions (OCR, paragraphs, text nodes, tables)
         const isOCR = (reg as any).sources?.includes('OCR') || reg.source?.includes('OCR');
         const textCandidates = indianPiiRegistry.detectText(sanitizedText, {
-          surroundingText: reg.clean_text || reg.text,
+          surroundingText: (reg as any).clean_text || reg.text || undefined,
           sourceType: isOCR ? 'OCR' : 'DOM',
         });
 
@@ -606,7 +617,8 @@ export const privacyStub = {
 
         // 2. PAN detection with entity code check
         if (!regionHasPii) {
-          const panMatches = sanitizedText.match(panRegex);
+          const normalizedPanText = sanitizedText.replace(/\b([A-Za-z]{5})\s*(\d{4})\s*([A-Za-z])\b/g, '$1$2$3');
+          const panMatches = normalizedPanText.match(panRegex);
           if (panMatches) {
             for (const match of panMatches) {
               if (validateIndianPAN(match)) {
@@ -624,6 +636,9 @@ export const privacyStub = {
                   mandatory: true,
                 });
                 sanitizedText = sanitizedText.replace(match, '<REDACTED_PAN>');
+                if (!sanitizedText.includes('<REDACTED_PAN>')) {
+                  sanitizedText = '<REDACTED_PAN>';
+                }
                 textReplacements++;
               }
             }

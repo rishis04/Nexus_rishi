@@ -202,8 +202,8 @@ export const visionEngine = {
       
       // Phase 2/3: OCR Integration for precise micro-bounding boxes
       // Note: In Chrome Extension MV3, Tesseract remote CDN workers violate extension CSP.
-      // We safely bypass remote CDN loading unless explicitly configured with local worker paths.
-      if (typeof Worker !== 'undefined' && (globalThis as any).__ENABLE_LOCAL_OCR__) {
+      // We safely catch and bypass remote CDN loading if workers fail or lack offline assets.
+      if (typeof Worker !== 'undefined' && (globalThis as any).__ENABLE_LOCAL_OCR__ !== false && req.image_data_url) {
         try {
           const tOcr0 = performance.now();
           const result = await Tesseract.recognize(req.image_data_url, 'eng', {
@@ -211,18 +211,19 @@ export const visionEngine = {
           });
           ocrMs = performance.now() - tOcr0;
           
-          (result.data as any)?.words?.forEach((word: any, index: number) => {
+          let ocrIndex = 0;
+          (result.data as any)?.words?.forEach((word: any) => {
             const bbox: [number, number, number, number] = [word.bbox.x0, word.bbox.y0, word.bbox.x1 - word.bbox.x0, word.bbox.y1 - word.bbox.y0];
             ocr_tokens.push({
               text: word.text,
               bbox: bbox,
               confidence: word.confidence / 100,
-              line_id: word.line?.id || index
+              line_id: word.line?.id || ocrIndex
             });
             
             regions.push({
-              region_id: `ocr_reg_${index}`,
-              local_key: `ocr_${index}`,
+              region_id: `ocr_reg_${ocrIndex}`,
+              local_key: `ocr_${ocrIndex}`,
               dom_ref: null,
               source: ['OCR', 'VISION'],
               semantic_type: 'text',
@@ -234,11 +235,49 @@ export const visionEngine = {
               visual_state: ['visible', 'enabled'],
               route: 'LOW',
               sensitivity: 'none',
-              origin: req.dom.url_origin,
+              origin: req.dom?.url_origin || '',
               frame_id: 'main',
-              page_state_hash: req.dom.page_state_hash,
+              page_state_hash: req.dom?.page_state_hash || '',
               timestamp: Date.now(),
             });
+            ocrIndex++;
+          });
+
+          // Also check lines to capture full PAN numbers or numbers split with spaces (e.g. "ABCPE 1234 F")
+          (result.data as any)?.lines?.forEach((line: any) => {
+            if (line.text && line.bbox) {
+              const lineText = line.text.trim();
+              const bbox: [number, number, number, number] = [
+                line.bbox.x0,
+                line.bbox.y0,
+                line.bbox.x1 - line.bbox.x0,
+                line.bbox.y1 - line.bbox.y0,
+              ];
+              const panNormalized = lineText.replace(/\s+/g, '');
+              const panMatches = panNormalized.match(/[A-Za-z]{5}\d{4}[A-Za-z]/g);
+              if (panMatches) {
+                regions.push({
+                  region_id: `ocr_reg_line_${ocrIndex}`,
+                  local_key: `ocr_line_${ocrIndex}`,
+                  dom_ref: null,
+                  source: ['OCR', 'VISION'],
+                  semantic_type: 'text',
+                  text: lineText,
+                  bbox: bbox,
+                  confidence: (line.confidence || 90) / 100,
+                  visible: true,
+                  interactable: false,
+                  visual_state: ['visible', 'enabled'],
+                  route: 'LOW',
+                  sensitivity: 'none',
+                  origin: req.dom?.url_origin || '',
+                  frame_id: 'main',
+                  page_state_hash: req.dom?.page_state_hash || '',
+                  timestamp: Date.now(),
+                });
+                ocrIndex++;
+              }
+            }
           });
         } catch (e) {
           console.warn("Tesseract OCR skipped in this context:", e);

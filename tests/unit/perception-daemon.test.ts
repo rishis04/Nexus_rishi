@@ -34,7 +34,7 @@ describe('PerceptionDaemon (Phase 2 Validation)', () => {
     
     // Test double for WXT message bus
     let domSnapshotCalls = 0;
-    vi.spyOn(bus, 'send').mockImplementation(async (messageType: string) => {
+    vi.spyOn(bus, 'send').mockImplementation((async (messageType: string) => {
       if (messageType === 'dom/snapshot') {
         domSnapshotCalls++;
         // On re-verification call after screenshot capture, return verified snapshot
@@ -58,7 +58,7 @@ describe('PerceptionDaemon (Phase 2 Validation)', () => {
         return { ok: false, data: null };
       }
       return { ok: false, error: { stage: 'network', code: 'ERR', message: 'mock' } as any };
-    });
+    }) as any);
 
     daemon = new PerceptionDaemon();
     

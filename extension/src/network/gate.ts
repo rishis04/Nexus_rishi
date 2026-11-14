@@ -2,6 +2,7 @@ import type { AttestedPayload, PlanResponse } from '@contracts/index.js';
 import { PlanResponseSchema, stageError } from '@contracts/index.js';
 import { sha256Hex } from '../security/sha256.js';
 import { flags } from '../config/flags.js';
+import { egressAuditAdapter } from './egress-audit/index.js';
 
 export function getServerUrl(): string {
   const proc = typeof globalThis !== 'undefined' ? (globalThis as any).process : undefined;
@@ -22,6 +23,21 @@ export async function sendPlan(attested: AttestedPayload): Promise<PlanResponse>
 
   const serverUrl = getServerUrl();
   const apiKey = getApiKey();
+
+  // Phase 6: Egress Audit Integration — Observe finalized, attested context immediately pre-egress
+  try {
+    await egressAuditAdapter.observe({
+      request_id: attested.request_id,
+      sha256: attested.sha256,
+      body: attested.body,
+      issued_at: attested.issued_at,
+      metadata: {
+        egress_destination: `${serverUrl}/v1/plan`,
+      },
+    });
+  } catch (auditErr: any) {
+    console.warn('[NetworkGate] Egress audit observation failure (proceeding safely):', auditErr?.message || auditErr);
+  }
 
   // Attempt real network call to FastAPI server
   try {
